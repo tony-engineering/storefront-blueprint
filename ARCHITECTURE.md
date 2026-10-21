@@ -323,13 +323,12 @@ api:
 
 ### Unit tests — `Storefront.UnitTests` (xUnit)
 
-Fast, no I/O. Cover:
-- Order state machine: every legal transition, every illegal one throws.
-- Total calculation and money arithmetic.
-- Request hashing (equal bodies in different line order produce the same hash).
-- Validators.
-- `OrderService` outcome mapping, with `IPaymentGateway` substituted (NSubstitute).
-- `PaymentReconciler` decisions (resolve, back off, give up).
+Fast, no I/O. Only for logic that the integration tests cannot reach well through HTTP:
+- **Order state machine:** every legal transition succeeds and every illegal one throws, as a table over all status pairs. Through the API only a few states can be set up on demand.
+- **Request hashing:** equivalent bodies produce the same hash (lines in a different order, the same product split across two lines, formatting differences); different bodies do not. These cases decide whether a retry counts as the same request, and are tedious to set up over HTTP.
+- **Money arithmetic:** line and order totals in minor units, currency mismatch rejected, no rounding drift.
+
+Everything else is left to the integration tests on purpose: payment outcome mapping, reconciler decisions (resolve, back off, give up) and validation are already exercised end to end with the fake clock and scripted gateway, so unit tests there would duplicate them.
 
 ### Integration tests — `Storefront.IntegrationTests`
 
@@ -377,20 +376,22 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 ```
 
+Four independent chains start together. The only ordering is inside the backend test chain: integration tests wait for unit tests.
+
 ```mermaid
 flowchart LR
-    Push(["push to main"]) --> Unit["backend-unit"]
-    Push --> Int["backend-integration<br/>(Testcontainers + Respawn)"]
-    Push --> Fe["frontend<br/>(lint · test · build)"]
-    Unit --> Docker["docker-build"]
-    Int --> Docker
-    Fe --> Docker
+    Push(["push to main /<br/>pull request"]) --> Unit["backend-unit"]
+    Unit --> Int["backend-integration<br/>(Testcontainers + Respawn)"]
+    Push --> BeDocker["backend-docker"]
+    Push --> FeDocker["frontend-docker<br/>(includes production build)"]
+    Push --> Fe["frontend<br/>(lint · test)"]
 
     Manual(["manual trigger<br/>(workflow_dispatch)"]) --> Load["load-test (k6)<br/>separate workflow"]
 ```
@@ -398,13 +399,19 @@ flowchart LR
 | Job | Steps | Depends on |
 |---|---|---|
 | `backend-unit` | setup .NET 10 → restore → build → `dotnet test tests/Storefront.UnitTests` | — |
-| `backend-integration` | setup .NET 10 → `dotnet test tests/Storefront.IntegrationTests` (Testcontainers uses the runner's Docker) | — |
-| `frontend` | setup Node → `npm ci` → lint → unit tests → production build | — |
-| `docker-build` | build both images (no push) to catch Dockerfile breakage | all three above |
+| `backend-integration` | setup .NET 10 → `dotnet test tests/Storefront.IntegrationTests` (Testcontainers uses the runner's Docker). Allowed to fail for now, see below | `backend-unit` |
+| `backend-docker` | build `./backend` as `storefront-api:<commit SHA>` (no push) | — |
+| `frontend-docker` | build `./frontend` as `storefront-web:<commit SHA>` (no push); its Dockerfile runs `ng build --configuration production`, so AOT errors and bundle budgets fail here | — |
+| `frontend` | setup Node 22 → `npm ci` → lint → unit tests | — |
 
-- Unit and integration tests run **in parallel**; both must pass.
+- **Integration after unit:** unit tests take seconds and need no Docker. If they fail, the integration tests would mostly report the same bug through HTTP, after a PostgreSQL container start. On a green run the cost is that integration tests start a few seconds later.
+- **Docker builds don't wait for tests:** they check different things (Dockerfiles, packaging, the production build), and a failing test should not hide a broken image. Running them alongside the tests reports every failure in one run and keeps the wall-clock time to the longest chain.
+- **The frontend is built once per run**, inside `frontend-docker`; the `frontend` job only lints and tests.
+- Every job must pass for the run to be green, with one temporary exception: the integration tests were written before the backend (test-first) and fail until it is implemented, so `backend-integration` runs with `continue-on-error: true`. Its failures stay visible in the run; the flag is removed once the backend makes them pass.
+- **Image tags:** each image is tagged with the full commit SHA (`github.sha`), so an image always maps to exactly one commit. Images are not pushed yet; pushing to a registry and moving a `latest` tag come later.
+- **Actions pinned to commit SHAs:** every third-party action is referenced by its full commit SHA, with the version in a comment (`actions/checkout@<sha> # v5`). A tag can be moved to different code; a SHA cannot, which matters once the pipeline can deploy code that handles payments.
 - Test results are published as TRX files and uploaded as artifacts, so failures are readable in the Actions UI.
-- NuGet and npm caches are enabled.
+- NuGet and npm caches are enabled; Docker layers use the GitHub Actions cache.
 - `ubuntu-latest` runners include Docker, so Testcontainers needs no extra setup.
 
 ### `load-test.yml` — manual only
