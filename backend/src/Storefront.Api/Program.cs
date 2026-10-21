@@ -12,12 +12,18 @@ builder.Services.AddHealthChecks();
 builder.Services.AddApiDocs();
 builder.Services.AddPersistence();
 builder.Services.AddPayments();
+builder.Services.AddOrders();
 
 // Numbers must be JSON numbers: "1999" is rejected for a price. ASP.NET's web defaults accept
 // numeric strings, which would also make the OpenAPI schema (and the generated Angular client)
 // type every number as `number | string`.
 builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
+{
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+
+    // Enums travel as their names ("Paid"), which is what the OpenAPI document and the Angular client expect.
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 var app = builder.Build();
 
