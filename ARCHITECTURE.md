@@ -32,20 +32,21 @@ flowchart LR
 
     Web -- "/api (proxied)" --> Endpoints
 
-    Ef --> Sqlite[("SQLite in-memory<br/>(default runtime)")]
-    Ef -.-> Pg[("PostgreSQL<br/>(integration tests)")]
+    Ef -- Npgsql --> Pg[("PostgreSQL 18<br/>data dir on tmpfs (RAM)")]
 ```
 
-Two containers locally (`api`, `web`). No message broker, no separate payment service.
+Three containers locally (`web`, `api`, `postgres`). No message broker, no separate payment service.
+
+**One database engine everywhere.** The app, the integration tests and CI all run PostgreSQL with its data directory on a `tmpfs` (RAM) mount. That gives the in-memory behaviour the brief allows (fast, reset on restart) while running on the same engine the system would use with real money.
 
 ## 2. Technology choices
 
 | Concern | Choice | Why |
 |---|---|---|
 | Backend | .NET 10, ASP.NET Core Minimal APIs | Required by the brief; current LTS; minimal APIs keep endpoint code small and explicit. |
-| Persistence | EF Core | One model, swappable provider. |
-| Runtime database | SQLite **in-memory** (shared, kept-open connection), seeded on startup | Brief allows in-memory. Unlike the EF Core InMemory provider, SQLite enforces **unique constraints and transactions**, which the idempotency design relies on. |
-| Test database | PostgreSQL via **Testcontainers** | Proves the code runs on a production-grade database and makes the concurrency tests meaningful. |
+| Persistence | EF Core 10 + `Npgsql.EntityFrameworkCore.PostgreSQL` | Official PostgreSQL provider; migrations, unique-constraint errors and row versioning all supported. |
+| Database | PostgreSQL 18, data directory on **tmpfs**, durability off | In-memory in practice (RAM, reset on restart) as the brief allows, but with real transactions, constraints and concurrent writers. See §8. |
+| Test database | Same image via **Testcontainers**, reset with **Respawn** | Tests run on exactly what the app runs on; the concurrency tests exercise real parallel transactions. |
 | API docs | `Microsoft.AspNetCore.OpenApi` + Swagger UI at `/swagger` | Call every endpoint manually, including admin ones via the bearer token. |
 | Validation | FluentValidation | Rules live next to the request types and are unit-testable. |
 | Errors | ProblemDetails (RFC 9457) | One consistent, machine-readable error shape. |
@@ -65,20 +66,29 @@ Two containers locally (`api`, `web`). No message broker, no separate payment se
 │   │   │   └── Auth/            # dev-only token endpoint
 │   │   ├── Payments/            # IPaymentGateway, MockPaymentGateway, PaymentReconciler
 │   │   ├── Idempotency/         # filter, record entity, request hashing
-│   │   ├── Persistence/         # DbContext, seed data, provider selection
+│   │   ├── Persistence/         # DbContext, entity configs, seeder, Migrations/
 │   │   └── Program.cs
 │   ├── tests/Storefront.UnitTests/
 │   ├── tests/Storefront.IntegrationTests/
 │   └── Dockerfile
 ├── frontend/                    # Angular app + Dockerfile + nginx.conf
+├── ui-kit/                      # storefront CSS/JS kit, no dependencies, no build step
+│   ├── storefront.css           # design tokens + all components (sf- prefix)
+│   ├── storefront.js            # helpers: formatMoney, orderStatus, modal, toast, withBusy
+│   ├── storefront.d.ts          # types so strict TypeScript / Angular can import the helpers
+│   ├── demo.html                # every component on one page, for preview
+│   └── README.md                # usage in plain HTML and Angular
 ├── loadtests/                   # k6 scripts
 ├── .github/workflows/
 │   ├── ci.yml                   # every push
 │   └── load-test.yml            # manual only
 ├── docker-compose.yml
 ├── ARCHITECTURE.md
+├── AI_USAGE.md                  # journal of how AI was used
 └── README.md
 ```
+
+`ui-kit/` sits at the root for now so it can be previewed on its own (`npx serve ui-kit`). When the Angular app is scaffolded it moves to `frontend/src/ui-kit/` and `storefront.css` is listed first under `styles` in `angular.json`.
 
 One API project organised by feature. Splitting into Domain / Application / Infrastructure projects adds ceremony without benefit at this size; it is the natural next step if the codebase grows.
 
@@ -86,16 +96,21 @@ One API project organised by feature. Splitting into Domain / Application / Infr
 
 ```
 Product      Id, Name, Description, Price (Money), IsDeleted, CreatedAt
-Order        Id, Status, Total (Money), PaymentToken, FailureReason,
-             PaymentAttempts, CreatedAt, UpdatedAt, Lines[]
+Order        Id, Status, Total (Money), FailureReason,
+             CreatedAt, UpdatedAt, Version (xmin), Lines[], Payments[]
 OrderLine    ProductId, ProductName, UnitPrice (Money), Quantity   ← snapshot
+PaymentAttempt
+             Id, OrderId, Number, PaymentToken, Status, FailureReason,
+             ChargeCalls, NextCallAt, ChargeId, CreatedAt
 Idempotency  Key (unique), RequestHash, OrderId, ResponseStatus,
              ResponseBody, State (InProgress | Completed), CreatedAt
 ```
 
-- **Money** is stored as integer **minor units** (`long` cents) plus a currency code. No floating point, identical behaviour on SQLite and PostgreSQL. Single currency (GBP) assumed.
+- **Money** is stored as integer **minor units** (`long` cents) plus a currency code. No floating-point rounding anywhere. Single currency (GBP) assumed.
+- **Optimistic concurrency on orders:** `Order.Version` is mapped to PostgreSQL's system column `xmin` (`IsRowVersion()`), so no extra column is needed. If the checkout request and the reconciler update the same order at once, the second save fails with `DbUpdateConcurrencyException` instead of silently overwriting the first; the loser reloads and re-applies its transition (which the state machine may then reject).
 - **Order lines snapshot** name and unit price at purchase time, so later catalog edits or deletions never rewrite history.
 - **Products are soft-deleted**: hidden from the catalog and rejected for new orders, but still resolvable from old orders.
+- **One order, several payment attempts.** Paying again with another card adds a `PaymentAttempt`; the order and its total stay the same. The attempt's `Id` is the idempotency key sent to the provider, so retries of one attempt can never charge twice, while a new attempt (new card) is a genuinely new charge. `ChargeCalls` and `NextCallAt` drive the background retry schedule (§7).
 - **Prices are never taken from the client.** The client sends product IDs and quantities; the server computes the total.
 
 ### Order state machine
@@ -105,14 +120,22 @@ stateDiagram-v2
     [*] --> Pending : order saved
     Pending --> Paid : charge succeeded
     Pending --> PaymentFailed : charge declined
-    Pending --> PaymentUnknown : timeout / gateway error
+    Pending --> PaymentRetrying : provider unavailable (not charged)
+    Pending --> PaymentUnknown : timeout (may be charged)
+    PaymentRetrying --> Paid : retry succeeded
+    PaymentRetrying --> PaymentFailed : retry declined
+    PaymentRetrying --> PaymentUnknown : retry timed out
+    PaymentRetrying --> PaymentUnavailable : retry limit reached
     PaymentUnknown --> Paid : reconciler finds charge
     PaymentUnknown --> PaymentFailed : reconciler finds no charge
-    PaymentUnknown --> NeedsAttention : N attempts exhausted
+    PaymentUnknown --> NeedsAttention : N status checks exhausted
+    PaymentFailed --> Pending : customer pays with another card
+    PaymentUnavailable --> Pending : customer tries again later
     Paid --> [*]
-    PaymentFailed --> [*]
     NeedsAttention --> [*]
 ```
+
+`PaymentFailed` and `PaymentUnavailable` are not terminal: in both, the customer has **not been charged**, so they may start a new payment attempt on the same order (`POST /api/orders/{id}/payments`). `Paid` and `NeedsAttention` are terminal.
 
 Transitions live in the `Order` entity (`MarkPaid()`, `MarkFailed(reason)`, …) and throw on illegal moves, so no code path can, for example, mark a `Paid` order as failed.
 
@@ -123,6 +146,7 @@ Transitions live in the `Order` entity (`MarkPaid()`, `MarkFailed(reason)`, …)
 | GET | `/api/products` | public | 200 | Excludes soft-deleted products |
 | POST | `/api/orders` | public | 201 / 202 | Requires `Idempotency-Key` header |
 | GET | `/api/orders/{id}` | public | 200 | 404 if unknown |
+| POST | `/api/orders/{id}/payments` | public | 201 / 202 | New payment attempt (e.g. another card). Requires `Idempotency-Key`. Only from `PaymentFailed` or `PaymentUnavailable`; otherwise **409** |
 | POST | `/api/admin/products` | Admin | 201 + `Location` | Validated |
 | DELETE | `/api/admin/products/{id}` | Admin | 204 | Soft delete; idempotent (deleting twice is still 204) |
 | POST | `/api/auth/token` | public, **Development only** | 200 | Hardcoded `admin` / `customer` users |
@@ -141,7 +165,7 @@ The client generates one UUID per checkout attempt and sends it as `Idempotency-
 | Same key, different body | **422** — key reused with a different payload |
 | Same key, first request still in progress | **409** with `Retry-After: 1` |
 
-**Concurrency:** the key column has a **unique index**. The first request inserts an `InProgress` record; a concurrent request with the same key hits the constraint violation and gets 409 or the stored replay. Correctness comes from the database, not from in-process locks, so it still holds with several API instances. Constraint violations are recognised per provider (SQLite code 19, PostgreSQL 23505) behind one helper.
+**Concurrency:** the key column has a **unique index**. The first request inserts an `InProgress` record; a concurrent request with the same key hits the constraint violation and gets 409 or the stored replay. Correctness comes from the database, not from in-process locks, so it still holds with several API instances. The `InProgress` record is committed in its own short transaction before the gateway is called, so concurrent requests see it immediately. A violation surfaces as `PostgresException` with `SqlState == PostgresErrorCodes.UniqueViolation` (`23505`), detected in one helper.
 
 The request hash is SHA-256 over a canonical form of the body (lines sorted by product ID).
 
@@ -159,8 +183,8 @@ sequenceDiagram
     A->>A: Validate, load products, compute total
     Note right of A: 400 / 422 on bad input
     A->>DB: Save Order (Pending) + idempotency record, one transaction
-    A->>G: ChargeAsync(orderId, total, token)
-    Note right of G: order ID is the gateway's idempotency key
+    A->>G: ChargeAsync(attemptId, total, token)
+    Note right of G: payment attempt ID is the gateway's idempotency key
     alt Success
         G-->>A: charged
         A->>DB: Order → Paid, store response
@@ -169,7 +193,11 @@ sequenceDiagram
         G-->>A: declined
         A->>DB: Order → PaymentFailed, store response
         A-->>C: 201 Created (status PaymentFailed)
-    else Timeout / 5xx
+    else Unavailable (connection refused / 503)
+        G--xA: refused, nothing charged
+        A->>DB: Order → PaymentRetrying, schedule retry
+        A-->>C: 202 Accepted + Location
+    else Timeout / other 5xx
         G--xA: no answer
         A->>DB: Order → PaymentUnknown, store response
         A-->>C: 202 Accepted + Location
@@ -180,19 +208,40 @@ sequenceDiagram
 |---|---|---|
 | Success | `Paid` | **201 Created** |
 | Declined | `PaymentFailed` (+ reason) | **201 Created** — the order exists; the client shows "payment declined" |
-| Timeout / 5xx | `PaymentUnknown` | **202 Accepted** + `Location: /api/orders/{id}` |
+| Unavailable (connection refused, 503) | `PaymentRetrying` | **202 Accepted** + `Location: /api/orders/{id}` |
+| Timeout / other 5xx | `PaymentUnknown` | **202 Accepted** + `Location: /api/orders/{id}` |
 
 Why 202 for timeouts: after a timeout the charge **may have succeeded**. Reporting failure would invite the customer to pay twice. The honest answer is "accepted, outcome pending", and the client polls the order.
 
 Why the order is saved **before** calling the gateway: if the process crashes mid-call, the order and its idempotency record still exist, and the reconciler can resolve it.
 
-**Gateway calls** use a short timeout (configurable, default 3 s). They are **not retried inline**: a blind retry of a charge is exactly what causes double payments.
+Why a separate state for "unavailable": when the provider refuses the connection or answers 503, we **know** nothing was charged. Retrying is then safe, and so is telling the customer "you have not been charged". A timeout gives no such certainty, so the two are never mixed.
+
+**Gateway calls** use a short timeout (configurable, default 3 s). The request thread calls the provider **once** and never waits through retries, so the customer gets an answer in seconds.
+
+### Retry policy for an unavailable provider
+
+The reconciler retries the **same payment attempt with the same idempotency key**, with exponential backoff, until the provider answers or the limit is reached. A provider honouring idempotency keys cannot charge twice, even if an earlier "refused" call had in fact reached it.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `Payments:Retry:MaxChargeAttempts` | 6 | Calls per attempt, first inline call included |
+| `Payments:Retry:InitialDelay` | 2 s | Delay before the first retry |
+| `Payments:Retry:BackoffMultiplier` | 2 | Each delay doubles |
+| `Payments:Retry:MaxDelay` | 1 min | Cap on a single delay |
+
+With the defaults, calls happen at 0, 2, 6, 14, 30 and 62 s. A 30-second outage is ridden out and the customer sees `Paid`. A long outage ends in `PaymentUnavailable` after about a minute, with `charged: false` and reason `payment_provider_unavailable`: the client tells the customer the payment provider is unavailable at the moment, that they have not been charged, and that they can try again. **Declines are never retried automatically**: they are the bank's final answer.
 
 ### PaymentReconciler
 
-A `BackgroundService` that polls for `PaymentUnknown` orders every few seconds and calls `IPaymentGateway.GetStatusAsync(orderId)`. It **never charges again**. It applies backoff per order and moves an order to `NeedsAttention` after a configurable number of attempts.
+A `BackgroundService` that every few seconds calls `IPaymentReconciler.RunOnceAsync`, which processes every payment attempt that is due:
 
-**On queues:** the orders table *is* the durable work queue here. A broker (RabbitMQ, Azure Service Bus) would replace the polling loop once there are multiple instances, real money, or other consumers of payment events. With an in-memory database, unresolved orders are lost on restart, which is acceptable for this exercise and listed as a trade-off.
+- **`PaymentRetrying`**: charges again with the same idempotency key, following the retry policy above. After the last allowed call, the order becomes `PaymentUnavailable`.
+- **`PaymentUnknown`**: calls `IPaymentGateway.GetStatusAsync(attemptId)` only. It **never charges again**, because the first charge may have gone through. It applies backoff per attempt and moves the order to `NeedsAttention` after a configurable number of checks.
+
+Keeping the pass in `RunOnceAsync`, separate from the loop, lets the integration tests drive it step by step against a fake clock.
+
+**On queues:** the orders table *is* the durable work queue here. A broker (RabbitMQ, Azure Service Bus) would replace the polling loop once there are multiple instances, real money, or other consumers of payment events. Because the database lives in RAM, unresolved orders are lost if the `postgres` container restarts (an API restart alone loses nothing). That is acceptable for this exercise and listed as a trade-off.
 
 ### Mock payment gateway
 
@@ -204,16 +253,48 @@ A `BackgroundService` that polls for `PaymentUnknown` orders every few seconds a
 | `tok_decline` | Declined (`insufficient_funds`) |
 | `tok_timeout` | Hangs past the timeout; charge actually **succeeded** (reconciler finds `Paid`) |
 | `tok_error` | Returns an error; no charge made (reconciler finds `PaymentFailed`) |
+| `tok_unavailable` | Provider refuses every call; nothing charged (ends in `PaymentUnavailable`) |
 | `tok_flaky` | Status unavailable for the first two reconciler checks, then `Paid` |
 
-The mock records charges keyed by order ID, so a repeated charge is never applied twice and `GetStatusAsync` reports the truth. Swapping in a real provider means one new `IPaymentGateway` implementation.
+The mock records charges keyed by idempotency key (the payment attempt ID), so a repeated charge is never applied twice and `GetStatusAsync` reports the truth. Swapping in a real provider means one new `IPaymentGateway` implementation.
 
 ## 8. Persistence
 
-- `Database:Provider` setting selects `Sqlite` (default) or `Postgres`.
-- **SQLite in-memory:** a single `SqliteConnection` to `DataSource=:memory:` is opened at startup and kept open for the app's lifetime (the database disappears when the last connection closes).
-- Schema is created with `EnsureCreated()` and the catalog is seeded with hardcoded products. **No migrations** — trade-off: fine for in-memory and throwaway test containers; migrations would be added before any persistent deployment.
-- The same EF model and queries run on both providers; provider-specific code is limited to connection setup and constraint-violation detection.
+### PostgreSQL on tmpfs
+
+The ORM is unaware of the tmpfs: EF Core talks to an ordinary PostgreSQL server over a normal connection. Only the container configuration differs from a persistent setup.
+
+```yaml
+# docker-compose.yml (excerpt)
+postgres:
+  image: postgres:18-alpine          # pin the exact minor tag when scaffolding
+  environment:
+    POSTGRES_DB: storefront
+    POSTGRES_USER: storefront
+    POSTGRES_PASSWORD: storefront    # local only
+  command: >
+    postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+  tmpfs:
+    - /var/lib/postgresql:size=512m
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U storefront -d storefront"]
+    interval: 2s
+    retries: 15
+api:
+  depends_on:
+    postgres: { condition: service_healthy }
+```
+
+- **Mount point:** from PostgreSQL 18 the official image keeps data under a version-specific directory below `/var/lib/postgresql` instead of `/var/lib/postgresql/data`. Mounting the tmpfs at `/var/lib/postgresql` covers both layouts; mounting at the old path would silently leave data on the container's disk.
+- **Durability off** (`fsync`, `synchronous_commit`, `full_page_writes`): pointless for a RAM-backed throwaway database, and it removes disk-flush latency. These settings must never reach a persistent deployment.
+- **Health check:** the API starts only once PostgreSQL accepts connections.
+
+### Schema and data
+
+- **EF Core migrations** live in `Persistence/Migrations`. With a single provider they stay simple, and they are the same artifact a persistent deployment would use.
+- On startup (Development / Docker) the API runs `Database.MigrateAsync()`, then an idempotent `DbSeeder` inserts the hardcoded catalog if it is empty. In a multi-instance production deployment, migrations would run as a separate pipeline step instead.
+- Unique index on `Idempotency.Key`; index on `Order.Status` for the reconciler's query.
+- Connection string comes from `ConnectionStrings:Storefront` (environment variable in Docker, `appsettings.Development.json` pointing at `localhost:5432` for `dotnet run`).
 
 ## 9. Security
 
@@ -236,7 +317,7 @@ The mock records charges keyed by order ID, so a repeated charge is never applie
 - **Checkout** creates the idempotency key when the page opens and reuses it for retries. It disables the submit button while a request is in flight, shows each outcome distinctly, and polls `GET /api/orders/{id}` while the status is `PaymentUnknown`.
 - An HTTP interceptor attaches the JWT and maps ProblemDetails to user-facing messages.
 - Typed API client generated from the OpenAPI spec.
-- Layout based on a free Bootstrap storefront template (Eshopper), ported into components.
+- Styling comes from `ui-kit/` (adapted from a free storefront HTML/CSS kit): global `sf-` classes, no Bootstrap. Components bind state in templates rather than calling the kit's DOM helpers; `formatMoney` backs a `money` pipe and `orderStatus` drives status badges, so the UI shares the API's minor-units money model and order states.
 
 ## 12. Testing strategy
 
@@ -254,21 +335,23 @@ Fast, no I/O. Cover:
 
 **xUnit + WebApplicationFactory + Testcontainers + Respawn.**
 
-- **Testcontainers** starts one PostgreSQL container per test run, shared through an xUnit collection fixture.
-- **WebApplicationFactory** boots the real API in-process with `Database:Provider=Postgres`, the container's connection string, and a short payment timeout.
-- The schema is created once; **Respawn** wipes all tables before each test (`IAsyncLifetime`), then the seed catalog is re-inserted. Each test starts from a known state without paying for a new container.
+- **Testcontainers** starts one PostgreSQL container per test run, shared through an xUnit collection fixture. It uses the **same image, tmpfs mount and durability flags** as Docker Compose (`WithTmpfsMount("/var/lib/postgresql")`, `WithCommand("-c", "fsync=off", …)`), so tests run on exactly what the app runs on.
+- **WebApplicationFactory** boots the real API in-process with the container's connection string. It replaces `TimeProvider` with a `FakeTimeProvider` and `IPaymentGateway` with a scripted fake whose declines and outages each test sets up. The reconciler loop is switched off; tests call `IPaymentReconciler.RunOnceAsync` while advancing the fake clock, so a two-hour outage runs in seconds and every retry happens at a known moment.
+- **Migrations are applied once** per run. **Respawn** (`DbAdapter.Postgres`, ignoring `__EFMigrationsHistory`) deletes all rows before each test (`IAsyncLifetime`), then `DbSeeder` re-inserts the catalog. Each test starts from a known state without paying for a new container.
 - Tests go through real HTTP with `HttpClient`.
 
 Scenarios:
 - Same `Idempotency-Key` twice → one order, identical responses, `Idempotent-Replayed: true` on the second.
-- **10 parallel requests with one key → exactly one order** (the main reason to test against PostgreSQL).
+- **10 parallel requests with one key → exactly one order**; the rest get 409 or the replayed response. These are genuinely concurrent transactions on PostgreSQL, so the test proves the unique-constraint design rather than passing by accident.
+- Checkout and reconciler updating the same order concurrently → one wins, no lost update (`xmin` row version).
 - Same key, different body → 422. Missing key → 400.
 - Each payment token → expected status and HTTP code; `tok_timeout` resolves to `Paid` via the reconciler.
+- **Checkout payment scenarios** (`Payments/CheckoutPaymentTests.cs`): paid first time; declined and abandoned (never retried automatically); declined then paid with another card on the same order; provider down for 30 s then `Paid`; provider down for hours → retry limit → `PaymentUnavailable`, not charged. Each also checks that the customer was charged at most once, for exactly the total. The contract these tests expect is in the test project's `README.md`.
 - Ordering a deleted product → 422; old orders still show the deleted product's snapshot.
 - Admin endpoints: 401 anonymous, 403 customer, 201/204 admin.
 - Client-supplied prices are ignored.
 
-**Why PostgreSQL in tests when the app runs in-memory?** It verifies the persistence code against the kind of database the system would use with real money, and only a real database server exposes genuine concurrency behaviour. The cost is that the default runtime provider (SQLite) is exercised by local runs and unit-level checks rather than the integration suite — an accepted trade-off, documented in the README.
+**Why not an in-process in-memory database for tests?** The EF Core InMemory provider has no transactions or unique constraints, so the idempotency tests would pass without testing anything. SQLite in-memory enforces constraints but serialises all writers, so it cannot reproduce concurrent transactions. Running the same PostgreSQL-on-tmpfs container as the app costs a few seconds of container start-up per run and removes any gap between what is tested and what runs.
 
 ### Frontend tests
 
@@ -354,9 +437,17 @@ docker compose up --build
 | http://localhost:8080/swagger | API docs and manual calls |
 | http://localhost:8080/health | Health check |
 
-nginx in the `web` container proxies `/api` to the `api` container, so the browser sees one origin and CORS is not needed.
+nginx in the `web` container proxies `/api` to the `api` container, so the browser sees one origin and CORS is not needed. PostgreSQL is not exposed outside the Compose network by default.
 
-Without Docker: `dotnet run --project backend/src/Storefront.Api` and `npm start` in `frontend/` (dev proxy config forwards `/api`). Integration tests need Docker running for Testcontainers.
+**Developing outside containers:**
+
+```bash
+docker compose up -d postgres                       # database only, exposed on localhost:5432
+dotnet run --project backend/src/Storefront.Api     # applies migrations, seeds catalog
+cd frontend && npm start                            # dev proxy forwards /api
+```
+
+`docker compose restart postgres` (or `down`/`up`) resets the database to the seed data. Docker is required for both running the app and running the integration tests.
 
 ## 15. Assumptions
 
@@ -364,13 +455,17 @@ Without Docker: `dotnet run --project backend/src/Storefront.Api` and `npm start
 - No stock tracking; products are always available unless deleted.
 - Anonymous checkout; orders are retrievable by ID.
 - Authentication is mocked with hardcoded users for the exercise.
-- A declined payment yields a failed order; retrying payment means a new checkout (new key).
+- A declined payment leaves the order `PaymentFailed`. The customer can pay the same order again with another card (a new payment attempt with a new key). Declines are never retried automatically.
+- "Provider unavailable" (connection refused, 503) means nothing was charged; a timeout does not.
+- Data is intentionally ephemeral: restarting the database container resets the store to its seed catalog.
 
 ## 16. Trade-offs and future work
 
 | Decision | Trade-off | Next step for real money |
 |---|---|---|
-| In-memory SQLite | State lost on restart, including unresolved payments | Persistent PostgreSQL with migrations |
+| PostgreSQL on tmpfs, durability off | State lost when the database container restarts, including unresolved payments; app needs Docker | Remove the tmpfs and durability flags, add a volume or managed PostgreSQL; migrations already exist |
+| Migrations applied at app startup | Unsafe with many instances starting at once | Run migrations as a pipeline step |
+| Background retries only for "unavailable", fixed retry limit | Customer gets an answer in about a minute but must retry themselves after a long outage; every order keeps hitting a provider that is down | Circuit breaker that fails fast while the provider is down; notify the customer when it recovers |
 | Polling reconciler | Single instance, simple | Message broker + outbox for payment events |
 | Mock auth | Not secure | External identity provider (OIDC) |
 | Mock gateway | No real provider semantics (webhooks, 3DS) | Real provider integration via `IPaymentGateway`, webhook endpoint |

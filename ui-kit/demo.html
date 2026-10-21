@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Storefront UI Kit · Demo</title>
+    <link rel="stylesheet" href="storefront.css">
+    <style>
+        /* Demo-page-only styles. Not part of the kit. */
+        .demo-block { margin-top: 3.5rem; }
+        .demo-block > h3 { margin-bottom: 0.35rem; }
+        .demo-block > .demo-note { margin-bottom: 1.25rem; font-size: 0.875rem; }
+        .demo-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; align-items: start; }
+        @media (max-width: 800px) { .demo-grid-2 { grid-template-columns: minmax(0, 1fr); } }
+        .demo-label { display: block; margin: 1.25rem 0 0.6rem; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sf-text-light); }
+        .demo-label:first-child { margin-top: 0; }
+        code { font-size: 0.85em; background: var(--sf-surface-2); border: 1px solid var(--sf-border); padding: 0.05rem 0.3rem; }
+    </style>
+</head>
+<body>
+
+<div class="sf-container" id="file-hint" hidden style="padding-top:1rem">
+    <div class="sf-alert sf-alert-warning" role="status">
+        <div>
+            <strong class="sf-alert-title">Opened from disk</strong>
+            Styles work, but browsers block JavaScript modules on <code>file://</code>. To try the interactive parts,
+            serve this folder, e.g. <code>npx serve ui-kit</code> or <code>python3 -m http.server -d ui-kit</code>.
+        </div>
+    </div>
+</div>
+
+<!-- ===================== Navbar ===================== -->
+<header class="sf-topnav">
+    <div class="sf-topstrip">Free delivery and levelling on every home across mainland UK</div>
+    <div class="sf-nav-main">
+        <a href="#" class="sf-logo"><span class="sf-logo-icon">T</span><span>Tiny Haven</span></a>
+
+        <nav class="sf-nav-links" id="main-nav" aria-label="Main">
+            <a href="#homes" class="sf-nav-link" aria-current="page">Homes</a>
+            <a href="#cart" class="sf-nav-link">Cart</a>
+            <a href="#order" class="sf-nav-link">Track order</a>
+            <a href="#admin" class="sf-nav-link">Admin <span class="sf-badge sf-badge-default">Staff</span></a>
+        </nav>
+
+        <div class="sf-nav-actions">
+            <a href="#cart" class="sf-btn sf-btn-primary sf-cart-btn">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                <span class="sf-cart-label">Cart</span>
+                <span class="sf-cart-count" id="cart-count">2</span><span class="sf-visually-hidden"> items</span>
+            </a>
+            <button type="button" class="sf-btn sf-btn-ghost sf-btn-icon sf-nav-toggle" data-sf-nav-toggle aria-controls="main-nav" aria-expanded="false" aria-label="Menu">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" aria-hidden="true"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></svg>
+            </button>
+        </div>
+    </div>
+</header>
+
+<main>
+    <!-- ===================== Hero ===================== -->
+    <section class="sf-section">
+        <div class="sf-container">
+            <div class="sf-hero">
+                <div class="sf-hero-kicker">
+                    <span class="sf-badge sf-badge-sale">2026 range</span>
+                    <span>Handbuilt, road-legal, off-grid ready</span>
+                </div>
+                <h1 class="sf-hero-title">Small homes, built to last</h1>
+                <p class="sf-hero-desc">Timber-framed tiny houses on their own trailers. Pick a layout, place your order, and we deliver and level it on your plot.</p>
+                <div class="sf-hero-actions">
+                    <a href="#homes" class="sf-btn sf-btn-primary sf-btn-lg">Browse homes</a>
+                    <a href="#order" class="sf-btn sf-btn-outline sf-btn-lg">Track an order</a>
+                </div>
+                <div class="sf-hero-trust">
+                    <span class="sf-trust-item">🚚 Delivered on its own trailer</span>
+                    <span class="sf-trust-item">🌲 FSC-certified timber</span>
+                    <span class="sf-trust-item">🔒 Secure checkout</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== Product grid ===================== -->
+    <section class="sf-section" id="homes" style="padding-top:0">
+        <div class="sf-container">
+            <div class="sf-section-head">
+                <div>
+                    <span class="sf-eyebrow">Catalogue</span>
+                    <h2>Our homes</h2>
+                </div>
+                <p>3 homes · prices include VAT and delivery</p>
+            </div>
+
+            <div class="sf-product-grid">
+                <article class="sf-product-card">
+                    <div class="sf-product-media">
+                        <span class="sf-badge sf-badge-new sf-product-badge">New</span>
+                        <div class="sf-product-placeholder">
+                            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M6 30 32 9l26 21"/><path d="M12 25v31h40V25"/><path d="M27 56V41h10v15"/><path d="M17 33h7v7h-7zM40 33h7v7h-7z"/><path d="M43 15V9h5v10"/></svg>
+                        </div>
+                    </div>
+                    <div class="sf-product-details">
+                        <span class="sf-product-cat">Off-grid</span>
+                        <h3 class="sf-product-title">The Larch 18</h3>
+                        <p class="sf-product-desc">A larch-clad one-bedroom home with a full kitchen, wet room and roof-mounted solar.</p>
+                        <ul class="sf-product-specs"><li>18 m²</li><li>Sleeps 2</li><li>Solar + battery</li></ul>
+                        <div class="sf-product-price-row">
+                            <div class="sf-price-box"><span class="sf-price" data-money="3850000">£38,500.00</span></div>
+                            <button type="button" class="sf-btn sf-btn-primary sf-btn-sm" data-add="The Larch 18" data-price="3850000" aria-label="Add The Larch 18 to cart"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Add</button>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="sf-product-card">
+                    <div class="sf-product-media">
+                        <span class="sf-badge sf-badge-sale sf-product-badge">Save £5,100</span>
+                        <div class="sf-product-placeholder">
+                            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M5 20 32 12l27 8"/><path d="M8 19v28h48V19"/><path d="M14 27h12v9H14z"/><path d="M36 47V27h9v20"/><path d="M50 27h3v9h-3"/><path d="M2 51h60"/><circle cx="22" cy="54" r="3.5"/><circle cx="31" cy="54" r="3.5"/></svg>
+                        </div>
+                    </div>
+                    <div class="sf-product-details">
+                        <span class="sf-product-cat">On wheels</span>
+                        <h3 class="sf-product-title">Fjord Cabin 24</h3>
+                        <p class="sf-product-desc">Two sleeping lofts, a wood burner and a fold-down deck. Tows on a twin-axle trailer.</p>
+                        <ul class="sf-product-specs"><li>24 m²</li><li>Sleeps 4</li><li>Wood burner</li></ul>
+                        <div class="sf-product-price-row">
+                            <div class="sf-price-box">
+                                <span class="sf-price sf-price-sale" data-money="5290000">£52,900.00</span>
+                                <span class="sf-price-original" data-money="5800000">£58,000.00</span>
+                            </div>
+                            <button type="button" class="sf-btn sf-btn-primary sf-btn-sm" data-add="Fjord Cabin 24" data-price="5290000" aria-label="Add Fjord Cabin 24 to cart"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Add</button>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="sf-product-card">
+                    <div class="sf-product-media">
+                        <div class="sf-product-placeholder">
+                            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M32 6 6 57h52z"/><path d="M27 57V45h10v12"/><circle cx="32" cy="31" r="4.5"/><path d="M14 57 32 21l18 36"/></svg>
+                        </div>
+                    </div>
+                    <div class="sf-product-details">
+                        <span class="sf-product-cat">Garden</span>
+                        <h3 class="sf-product-title">Meadow A-Frame</h3>
+                        <p class="sf-product-desc">A bright A-frame studio for a garden office or guest room, with a glazed gable end.</p>
+                        <ul class="sf-product-specs"><li>15 m²</li><li>Sleeps 2</li><li>Mains ready</li></ul>
+                        <div class="sf-product-price-row">
+                            <div class="sf-price-box"><span class="sf-price" data-money="2975000">£29,750.00</span></div>
+                            <button type="button" class="sf-btn sf-btn-primary sf-btn-sm" data-add="Meadow A-Frame" data-price="2975000" aria-label="Add Meadow A-Frame to cart"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Add</button>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== Kit reference ===================== -->
+    <section class="sf-section" style="padding-top:0">
+        <div class="sf-container">
+            <div class="sf-section-head" style="margin-bottom:0">
+                <div>
+                    <span class="sf-eyebrow">Kit reference</span>
+                    <h2>Components</h2>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="demo-block">
+                <h3>Buttons</h3>
+                <p class="demo-note"><code>.sf-btn</code> + a variant. Busy state comes from <code>withBusy()</code>.</p>
+                <div class="sf-card">
+                    <span class="demo-label">Variants</span>
+                    <div class="sf-cluster">
+                        <button type="button" class="sf-btn sf-btn-primary">Primary</button>
+                        <button type="button" class="sf-btn sf-btn-accent">Accent</button>
+                        <button type="button" class="sf-btn sf-btn-outline">Outline</button>
+                        <button type="button" class="sf-btn sf-btn-ghost">Ghost</button>
+                        <button type="button" class="sf-btn sf-btn-danger">Danger</button>
+                    </div>
+                    <span class="demo-label">Sizes</span>
+                    <div class="sf-cluster">
+                        <button type="button" class="sf-btn sf-btn-primary sf-btn-sm">Small</button>
+                        <button type="button" class="sf-btn sf-btn-primary">Default</button>
+                        <button type="button" class="sf-btn sf-btn-primary sf-btn-lg">Large</button>
+                        <button type="button" class="sf-btn sf-btn-outline sf-btn-icon" aria-label="Add">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </button>
+                    </div>
+                    <span class="demo-label">States</span>
+                    <div class="sf-cluster">
+                        <button type="button" class="sf-btn sf-btn-primary" disabled>Disabled</button>
+                        <button type="button" class="sf-btn sf-btn-primary is-loading" disabled aria-busy="true">Loading</button>
+                        <button type="button" class="sf-btn sf-btn-outline" id="busy-demo">Click: busy for 1.5 s</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Badges + alerts -->
+            <div class="demo-block">
+                <h3>Badges, statuses &amp; alerts</h3>
+                <p class="demo-note">Order statuses come from <code>orderStatus()</code>, so labels and colours stay in one place.</p>
+                <div class="sf-card">
+                    <span class="demo-label">Badges</span>
+                    <div class="sf-cluster" style="--sf-gap:0.5rem">
+                        <span class="sf-badge sf-badge-sale">Sale</span>
+                        <span class="sf-badge sf-badge-new">New</span>
+                        <span class="sf-badge sf-badge-success">Success</span>
+                        <span class="sf-badge sf-badge-warning">Warning</span>
+                        <span class="sf-badge sf-badge-danger">Danger</span>
+                        <span class="sf-badge sf-badge-info">Info</span>
+                        <span class="sf-badge sf-badge-default">Default</span>
+                    </div>
+                    <span class="demo-label">Order statuses</span>
+                    <div class="sf-cluster" style="--sf-gap:0.5rem" id="status-badges">
+                        <span class="sf-badge sf-badge-default">Needs storefront.js</span>
+                    </div>
+                    <span class="demo-label">Alerts</span>
+                    <div class="sf-stack" style="--sf-gap:0.75rem">
+                        <div class="sf-alert sf-alert-success" role="status"><div><strong class="sf-alert-title">Payment received</strong>Your order is confirmed. We'll email your build slot.</div></div>
+                        <div class="sf-alert sf-alert-warning" role="status"><div><strong class="sf-alert-title">Confirming payment</strong>We're checking with the bank. Don't pay again; this page updates automatically.</div></div>
+                        <div class="sf-alert sf-alert-danger" role="alert"><div><strong class="sf-alert-title">Payment declined</strong>Nothing was charged. Please try another card.</div></div>
+                        <div class="sf-alert sf-alert-info" role="status"><div><strong class="sf-alert-title">Heads up</strong>Delivery slots for December are filling up.</div></div>
+                    </div>
+                    <span class="demo-label">Toasts</span>
+                    <div class="sf-cluster">
+                        <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" data-toast="success">Success toast</button>
+                        <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" data-toast="warning">Warning toast</button>
+                        <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" data-toast="danger">Error toast</button>
+                        <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" data-toast="info">Info toast</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cart + checkout outcome -->
+            <div class="demo-block" id="cart">
+                <h3>Cart &amp; checkout</h3>
+                <p class="demo-note">Table, quantity stepper and summary. Pick a mock payment token and place the order to see each outcome.</p>
+                <div class="sf-split">
+                    <section class="sf-panel">
+                        <header class="sf-panel-head">
+                            <h4>Your cart</h4>
+                            <span class="sf-badge sf-badge-default" id="cart-lines-badge">2 homes</span>
+                        </header>
+                        <div class="sf-table-scroll">
+                            <table class="sf-table">
+                                <thead>
+                                    <tr><th>Home</th><th>Qty</th><th class="is-num">Price</th><th class="is-num">Total</th><th class="is-actions"><span class="sf-visually-hidden">Actions</span></th></tr>
+                                </thead>
+                                <tbody id="cart-body">
+                                    <tr data-unit="3850000">
+                                        <td>
+                                            <div class="sf-prod-cell">
+                                                <span class="sf-prod-thumb"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" aria-hidden="true"><path d="M6 30 32 9l26 21"/><path d="M12 25v31h40V25"/><path d="M27 56V41h10v15"/></svg></span>
+                                                <div><span class="sf-prod-name">The Larch 18</span><span class="sf-prod-meta">18 m² · Off-grid</span></div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="sf-qty" data-sf-qty>
+                                                <button type="button" class="sf-qty-btn" data-sf-qty-step="-1" aria-label="Decrease quantity">−</button>
+                                                <input class="sf-qty-input" type="number" min="1" max="10" value="1" inputmode="numeric" aria-label="Quantity, The Larch 18">
+                                                <button type="button" class="sf-qty-btn" data-sf-qty-step="1" aria-label="Increase quantity">+</button>
+                                            </div>
+                                        </td>
+                                        <td class="is-num" data-money="3850000">£38,500.00</td>
+                                        <td class="is-num" data-line-total>£38,500.00</td>
+                                        <td class="is-actions"><button type="button" class="sf-btn sf-btn-ghost sf-btn-sm" data-remove>Remove</button></td>
+                                    </tr>
+                                    <tr data-unit="2975000">
+                                        <td>
+                                            <div class="sf-prod-cell">
+                                                <span class="sf-prod-thumb"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" aria-hidden="true"><path d="M32 6 6 57h52z"/><path d="M27 57V45h10v12"/></svg></span>
+                                                <div><span class="sf-prod-name">Meadow A-Frame</span><span class="sf-prod-meta">15 m² · Garden</span></div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="sf-qty" data-sf-qty>
+                                                <button type="button" class="sf-qty-btn" data-sf-qty-step="-1" aria-label="Decrease quantity">−</button>
+                                                <input class="sf-qty-input" type="number" min="1" max="10" value="1" inputmode="numeric" aria-label="Quantity, Meadow A-Frame">
+                                                <button type="button" class="sf-qty-btn" data-sf-qty-step="1" aria-label="Increase quantity">+</button>
+                                            </div>
+                                        </td>
+                                        <td class="is-num" data-money="2975000">£29,750.00</td>
+                                        <td class="is-num" data-line-total>£29,750.00</td>
+                                        <td class="is-actions"><button type="button" class="sf-btn sf-btn-ghost sf-btn-sm" data-remove>Remove</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <aside class="sf-panel">
+                        <header class="sf-panel-head"><h4>Summary</h4></header>
+                        <div class="sf-panel-body sf-stack">
+                            <div class="sf-summary">
+                                <div class="sf-summary-row"><span>Subtotal</span><span id="sum-subtotal">£68,250.00</span></div>
+                                <div class="sf-summary-row"><span>Delivery &amp; levelling</span><span class="sf-text-success">Free</span></div>
+                                <div class="sf-summary-row sf-summary-total"><span>Total</span><span id="sum-total">£68,250.00</span></div>
+                            </div>
+                            <div class="sf-form-group">
+                                <label class="sf-label" for="pay-token">Mock payment outcome</label>
+                                <select class="sf-select" id="pay-token">
+                                    <option value="tok_success">tok_success: approved</option>
+                                    <option value="tok_decline">tok_decline: declined</option>
+                                    <option value="tok_timeout">tok_timeout: gateway timeout</option>
+                                </select>
+                                <span class="sf-field-hint">Matches the mock gateway tokens in the API.</span>
+                            </div>
+                            <button type="button" class="sf-btn sf-btn-primary sf-btn-block sf-btn-lg" id="place-order">Place order</button>
+                            <div id="order-outcome" hidden></div>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+
+            <!-- Form -->
+            <div class="demo-block">
+                <h3>Forms</h3>
+                <p class="demo-note">Two-column grid that stacks on mobile. Errors use <code>aria-invalid</code> (Angular's <code>ng-touched.ng-invalid</code> also works).</p>
+                <form class="sf-panel" id="details-form" novalidate>
+                    <header class="sf-panel-head">
+                        <div>
+                            <h4>Delivery details</h4>
+                            <p style="font-size:0.85rem">Where should we deliver your home?</p>
+                        </div>
+                    </header>
+                    <div class="sf-panel-body sf-form-grid">
+                        <div class="sf-form-group">
+                            <label class="sf-label" for="f-name">Full name</label>
+                            <input class="sf-input" id="f-name" name="name" required autocomplete="name" placeholder="Alex Morgan" aria-describedby="f-name-err">
+                            <span class="sf-field-error" id="f-name-err" hidden>Enter your name</span>
+                        </div>
+                        <div class="sf-form-group">
+                            <label class="sf-label" for="f-email">Email</label>
+                            <input class="sf-input" id="f-email" name="email" type="email" required autocomplete="email" value="alex.morgan" aria-invalid="true" aria-describedby="f-email-err">
+                            <span class="sf-field-error" id="f-email-err">Enter a valid email address</span>
+                        </div>
+                        <div class="sf-form-group sf-span-2">
+                            <label class="sf-label" for="f-address">Plot address</label>
+                            <input class="sf-input" id="f-address" name="address" required autocomplete="street-address" placeholder="Field gate, Low Lane" aria-describedby="f-address-err">
+                            <span class="sf-field-error" id="f-address-err" hidden>Enter the delivery address</span>
+                        </div>
+                        <div class="sf-form-group">
+                            <label class="sf-label" for="f-access">Site access</label>
+                            <select class="sf-select" id="f-access" name="access">
+                                <option>Tarmac road to plot</option>
+                                <option>Gravel track</option>
+                                <option>Needs a site survey</option>
+                            </select>
+                        </div>
+                        <div class="sf-form-group">
+                            <label class="sf-label" for="f-postcode">Postcode</label>
+                            <input class="sf-input" id="f-postcode" name="postcode" autocomplete="postal-code" placeholder="LA22 0AA">
+                            <span class="sf-field-hint">Mainland UK only</span>
+                        </div>
+                        <div class="sf-form-group sf-span-2">
+                            <label class="sf-label" for="f-notes">Notes for the driver</label>
+                            <textarea class="sf-textarea" id="f-notes" name="notes" placeholder="Gate code, overhead cables, soft ground…"></textarea>
+                        </div>
+                        <label class="sf-checkbox-label sf-span-2"><input type="checkbox" class="sf-checkbox" checked> Email me build-progress photos</label>
+                    </div>
+                    <footer class="sf-panel-foot">
+                        <button type="reset" class="sf-btn sf-btn-ghost">Clear</button>
+                        <button type="submit" class="sf-btn sf-btn-primary">Save details</button>
+                    </footer>
+                </form>
+            </div>
+
+            <!-- Order timeline -->
+            <div class="demo-block" id="order">
+                <h3>Order details</h3>
+                <p class="demo-note">Timeline states: <code>is-done</code>, <code>is-current</code>, <code>is-failed</code>, and upcoming (no class).</p>
+                <div class="demo-grid-2">
+                    <section class="sf-panel">
+                        <header class="sf-panel-head">
+                            <div><span class="sf-eyebrow" style="margin:0">Order</span><h4>#7F3A-91C2</h4></div>
+                            <span class="sf-badge sf-badge-success">Paid</span>
+                        </header>
+                        <div class="sf-panel-body">
+                            <ol class="sf-timeline">
+                                <li class="sf-timeline-item is-done">
+                                    <span class="sf-timeline-ico" aria-hidden="true">✓</span>
+                                    <div class="sf-timeline-content">
+                                        <div class="sf-timeline-top"><span class="sf-timeline-label">Order placed</span><time class="sf-timeline-time">21 Oct, 10:24</time></div>
+                                        <p class="sf-timeline-meta">The Larch 18 × 1</p>
+                                    </div>
+                                </li>
+                                <li class="sf-timeline-item is-done">
+                                    <span class="sf-timeline-ico" aria-hidden="true">✓</span>
+                                    <div class="sf-timeline-content">
+                                        <div class="sf-timeline-top"><span class="sf-timeline-label">Payment received</span><time class="sf-timeline-time">21 Oct, 10:24</time></div>
+                                        <p class="sf-timeline-meta">£38,500.00 charged to card ending 4242.</p>
+                                    </div>
+                                </li>
+                                <li class="sf-timeline-item is-current">
+                                    <span class="sf-timeline-ico" aria-hidden="true">3</span>
+                                    <div class="sf-timeline-content">
+                                        <div class="sf-timeline-top"><span class="sf-timeline-label">In the workshop</span><time class="sf-timeline-time">Est. 6 weeks</time></div>
+                                        <p class="sf-timeline-meta">Your frame goes up next week. We'll send photos.</p>
+                                    </div>
+                                </li>
+                                <li class="sf-timeline-item">
+                                    <span class="sf-timeline-ico" aria-hidden="true">4</span>
+                                    <div class="sf-timeline-content">
+                                        <div class="sf-timeline-top"><span class="sf-timeline-label">Delivered &amp; levelled</span></div>
+                                    </div>
+                                </li>
+                            </ol>
+                        </div>
+                    </section>
+
+                    <section class="sf-panel">
+                        <header class="sf-panel-head">
+                            <div><span class="sf-eyebrow" style="margin:0">Order</span><h4>#B21E-0D47</h4></div>
+                            <span class="sf-badge sf-badge-danger">Payment declined</span>
+                        </header>
+                        <div class="sf-panel-body">
+                            <ol class="sf-timeline">
+                                <li class="sf-timeline-item is-done">
+                                    <span class="sf-timeline-ico" aria-hidden="true">✓</span>
+                                    <div class="sf-timeline-content">
+                                        <div class="sf-timeline-top"><span class="sf-timeline-label">Order placed</span><time class="sf-timeline-time">20 Oct, 16:02</time></div>
+                                        <p class="sf-timeline-meta">Fjord Cabin 24 × 1</p>
+                                    </div>
+                                </li>
+                                <li class="sf-timeline-item is-failed">
+                                    <span class="sf-timeline-ico" aria-hidden="true">✕</span>
+                                    <div class="sf-timeline-content">
+                                        <div class="sf-timeline-top"><span class="sf-timeline-label">Payment declined</span><time class="sf-timeline-time">20 Oct, 16:02</time></div>
+                                        <p class="sf-timeline-meta">Insufficient funds. Nothing was charged.</p>
+                                    </div>
+                                </li>
+                            </ol>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Admin table -->
+            <div class="demo-block" id="admin">
+                <h3>Admin: products</h3>
+                <p class="demo-note">Delete asks first with a native <code>&lt;dialog&gt;</code> via <code>confirmModal()</code>.</p>
+                <section class="sf-panel">
+                    <header class="sf-panel-head">
+                        <div class="sf-cluster"><h4>Products</h4><span class="sf-badge sf-badge-default" id="admin-count">3 live</span></div>
+                        <button type="button" class="sf-btn sf-btn-primary sf-btn-sm">+ New product</button>
+                    </header>
+                    <div class="sf-table-scroll">
+                        <table class="sf-table">
+                            <thead><tr><th>Product</th><th class="is-num">Price</th><th>Status</th><th class="is-actions"><span class="sf-visually-hidden">Actions</span></th></tr></thead>
+                            <tbody id="admin-body">
+                                <tr>
+                                    <td><div class="sf-prod-cell"><span class="sf-prod-thumb">🏡</span><div><span class="sf-prod-name">The Larch 18</span><span class="sf-prod-meta">Added 2 Oct 2026</span></div></div></td>
+                                    <td class="is-num" data-money="3850000">£38,500.00</td>
+                                    <td><span class="sf-badge sf-badge-success">Live</span></td>
+                                    <td class="is-actions"><button type="button" class="sf-btn sf-btn-ghost sf-btn-sm sf-text-danger" data-delete="The Larch 18">Delete</button></td>
+                                </tr>
+                                <tr>
+                                    <td><div class="sf-prod-cell"><span class="sf-prod-thumb">🛖</span><div><span class="sf-prod-name">Fjord Cabin 24</span><span class="sf-prod-meta">Added 2 Oct 2026</span></div></div></td>
+                                    <td class="is-num" data-money="5290000">£52,900.00</td>
+                                    <td><span class="sf-badge sf-badge-success">Live</span></td>
+                                    <td class="is-actions"><button type="button" class="sf-btn sf-btn-ghost sf-btn-sm sf-text-danger" data-delete="Fjord Cabin 24">Delete</button></td>
+                                </tr>
+                                <tr>
+                                    <td><div class="sf-prod-cell"><span class="sf-prod-thumb">⛺</span><div><span class="sf-prod-name">Meadow A-Frame</span><span class="sf-prod-meta">Added 14 Oct 2026</span></div></div></td>
+                                    <td class="is-num" data-money="2975000">£29,750.00</td>
+                                    <td><span class="sf-badge sf-badge-success">Live</span></td>
+                                    <td class="is-actions"><button type="button" class="sf-btn sf-btn-ghost sf-btn-sm sf-text-danger" data-delete="Meadow A-Frame">Delete</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Empty state -->
+            <div class="demo-block">
+                <h3>Empty state</h3>
+                <p class="demo-note">For an empty cart, no search results, or an unknown order ID.</p>
+                <div class="sf-panel">
+                    <div class="sf-empty">
+                        <div class="sf-empty-ico"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
+                        <h4>Your cart is empty</h4>
+                        <p>Browse the range and add a home to get started.</p>
+                        <a href="#homes" class="sf-btn sf-btn-primary sf-btn-sm">Browse homes</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- ===================== Footer ===================== -->
+<footer class="sf-footer">
+    <div class="sf-container">
+        <div class="sf-footer-guarantees">
+            <div class="sf-guarantee"><span class="sf-guarantee-icon" aria-hidden="true">🚚</span><div><h5>Delivered &amp; levelled</h5><p>Free across mainland UK</p></div></div>
+            <div class="sf-guarantee"><span class="sf-guarantee-icon" aria-hidden="true">🌲</span><div><h5>FSC timber</h5><p>Responsibly sourced frames and cladding</p></div></div>
+            <div class="sf-guarantee"><span class="sf-guarantee-icon" aria-hidden="true">🛠️</span><div><h5>10-year warranty</h5><p>On the structure and roof</p></div></div>
+        </div>
+        <div class="sf-footer-cols">
+            <div class="sf-footer-brand">
+                <a href="#" class="sf-logo"><span class="sf-logo-icon">T</span><span>Tiny Haven</span></a>
+                <p>Handbuilt tiny homes on wheels, delivered ready to live in.</p>
+                <span class="sf-badge sf-badge-success">● Workshop open</span>
+            </div>
+            <div class="sf-footer-col">
+                <h5>Shop</h5>
+                <nav class="sf-footer-nav" aria-label="Shop"><a href="#homes">All homes</a><a href="#homes">Off-grid</a><a href="#homes">On wheels</a></nav>
+            </div>
+            <div class="sf-footer-col">
+                <h5>Help</h5>
+                <nav class="sf-footer-nav" aria-label="Help"><a href="#order">Track an order</a><a href="#">Delivery</a><a href="#">Contact</a></nav>
+            </div>
+        </div>
+    </div>
+    <div class="sf-footer-bottom">
+        <div class="sf-container sf-footer-bottom-inner">
+            <span>© 2026 Tiny Haven · Demo storefront, no real orders are taken.</span>
+            <nav class="sf-footer-legal" aria-label="Legal"><a href="#">Privacy</a><a href="#">Terms</a></nav>
+        </div>
+    </div>
+</footer>
+
+<!-- ===================== Modals ===================== -->
+<dialog class="sf-modal" id="added-modal" aria-labelledby="added-title">
+    <form method="dialog">
+        <header class="sf-modal-head">
+            <div class="sf-modal-title-row">
+                <span class="sf-modal-ico is-success" aria-hidden="true">✓</span>
+                <div>
+                    <h4 id="added-title">Added to cart</h4>
+                    <p class="sf-modal-meta">Prices are confirmed at checkout.</p>
+                </div>
+            </div>
+            <button class="sf-btn sf-btn-ghost sf-btn-icon sf-btn-sm sf-modal-close" value="close" aria-label="Close">
+                <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2.5" fill="none" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </header>
+        <div class="sf-modal-body">
+            <div class="sf-summary">
+                <div class="sf-summary-row"><span id="added-name">Home</span><span id="added-price">£0.00</span></div>
+                <div class="sf-summary-row"><span>Delivery &amp; levelling</span><span class="sf-text-success">Free</span></div>
+            </div>
+        </div>
+        <footer class="sf-modal-foot">
+            <button class="sf-btn sf-btn-outline" value="continue">Keep browsing</button>
+            <button class="sf-btn sf-btn-primary" value="checkout">Go to cart</button>
+        </footer>
+    </form>
+</dialog>
+
+<dialog class="sf-modal" id="delete-modal" aria-labelledby="delete-title">
+    <form method="dialog">
+        <header class="sf-modal-head">
+            <div class="sf-modal-title-row">
+                <span class="sf-modal-ico is-danger" aria-hidden="true">!</span>
+                <div>
+                    <h4 id="delete-title">Delete product?</h4>
+                    <p class="sf-modal-meta"><span id="delete-name">This product</span> disappears from the catalogue.</p>
+                </div>
+            </div>
+        </header>
+        <div class="sf-modal-body">
+            <div class="sf-alert sf-alert-info"><div>Past orders keep their copy of the name and price, so order history is unaffected.</div></div>
+        </div>
+        <footer class="sf-modal-foot">
+            <button class="sf-btn sf-btn-outline" value="cancel" autofocus>Cancel</button>
+            <button class="sf-btn sf-btn-danger" value="confirm">Delete</button>
+        </footer>
+    </form>
+</dialog>
+
+<script>
+    if (location.protocol === 'file:') document.getElementById('file-hint').hidden = false;
+</script>
+
+<script type="module">
+    import {
+        initKit, formatMoney, ORDER_STATUS, orderStatus,
+        toast, confirmModal, setBusy, withBusy,
+    } from './storefront.js';
+
+    initKit();
+
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    // Prices: render every [data-money] from integer minor units.
+    $$('[data-money]').forEach((el) => { el.textContent = formatMoney(Number(el.dataset.money)); });
+
+    // Order status badges, generated from the single status map.
+    $('#status-badges').replaceChildren(...Object.entries(ORDER_STATUS).map(([key, meta]) => {
+        const b = document.createElement('span');
+        b.className = `sf-badge sf-badge-${meta.tone}`;
+        b.textContent = meta.label;
+        b.title = key;
+        return b;
+    }));
+
+    // Add to cart → modal → optional jump to cart.
+    let cartCount = 2;
+    $$('[data-add]').forEach((btn) => btn.addEventListener('click', async () => {
+        cartCount += 1;
+        $('#cart-count').textContent = String(cartCount);
+        $('#added-name').textContent = btn.dataset.add;
+        $('#added-price').textContent = formatMoney(Number(btn.dataset.price));
+        toast(`${btn.dataset.add} added to your cart`, { tone: 'success' });
+        if (await confirmModal('added-modal') === 'checkout') $('#cart').scrollIntoView({ behavior: 'smooth' });
+    }));
+
+    // Cart totals: integers only, formatted at the edge.
+    function recalc() {
+        let subtotal = 0;
+        const rows = $$('#cart-body tr');
+        rows.forEach((row) => {
+            const line = Number(row.dataset.unit) * Number($('input', row).value);
+            subtotal += line;
+            $('[data-line-total]', row).textContent = formatMoney(line);
+        });
+        $('#sum-subtotal').textContent = formatMoney(subtotal);
+        $('#sum-total').textContent = formatMoney(subtotal);
+        $('#cart-lines-badge').textContent = `${rows.length} ${rows.length === 1 ? 'home' : 'homes'}`;
+        $('#place-order').disabled = rows.length === 0;
+    }
+    $('#cart-body').addEventListener('change', recalc);
+    $('#cart-body').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove]');
+        if (!btn) return;
+        const row = btn.closest('tr');
+        const name = $('.sf-prod-name', row).textContent;
+        row.remove();
+        recalc();
+        toast(`${name} removed`, { tone: 'info' });
+    });
+    recalc();
+
+    // Checkout: mock gateway tokens → order status → alert.
+    const tokenToStatus = { tok_success: 'Paid', tok_decline: 'PaymentFailed', tok_timeout: 'PaymentUnknown' };
+    const outcome = $('#order-outcome');
+
+    function showOutcome(status) {
+        const meta = orderStatus(status);
+        outcome.className = `sf-alert sf-alert-${meta.tone}`;
+        outcome.setAttribute('role', meta.tone === 'danger' ? 'alert' : 'status');
+        const title = document.createElement('strong');
+        title.className = 'sf-alert-title';
+        title.textContent = meta.label;
+        const body = document.createElement('div');
+        body.append(title, meta.message);
+        outcome.replaceChildren(body);
+        outcome.hidden = false;
+    }
+
+    $('#place-order').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const status = await withBusy(btn, async () => {
+            await sleep(1200);
+            return tokenToStatus[$('#pay-token').value];
+        }, 'Placing order…');
+        showOutcome(status);
+
+        // Timeout: the API returns 202 and the client polls until the reconciler settles it.
+        if (status === 'PaymentUnknown') {
+            setBusy(btn, true, 'Waiting for bank…');
+            await sleep(2500);
+            setBusy(btn, false);
+            showOutcome('Paid');
+            toast('Payment confirmed by the bank', { tone: 'success' });
+        }
+    });
+
+    // Busy button demo.
+    $('#busy-demo').addEventListener('click', (e) => withBusy(e.currentTarget, () => sleep(1500), 'Working…'));
+
+    // Toast demo.
+    const toastText = {
+        success: 'Order #7F3A-91C2 confirmed',
+        warning: 'Payment is taking longer than usual',
+        danger: 'Could not reach the server. Please try again.',
+        info: 'Prices are refreshed every few minutes',
+    };
+    $$('[data-toast]').forEach((btn) => btn.addEventListener('click', () => {
+        toast(toastText[btn.dataset.toast], { tone: btn.dataset.toast });
+    }));
+
+    // Admin delete with confirmation.
+    $('#admin-body').addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-delete]');
+        if (!btn) return;
+        $('#delete-name').textContent = btn.dataset.delete;
+        if (await confirmModal('delete-modal') !== 'confirm') return;
+        btn.closest('tr').remove();
+        $('#admin-count').textContent = `${$$('#admin-body tr').length} live`;
+        toast(`${btn.dataset.delete} deleted`, { tone: 'success' });
+    });
+
+    // Form validation demo.
+    $('#details-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        let firstInvalid = null;
+        $$('[required]', e.currentTarget).forEach((field) => {
+            const ok = field.checkValidity();
+            field.setAttribute('aria-invalid', String(!ok));
+            const err = document.getElementById(`${field.id}-err`);
+            if (err) err.hidden = ok;
+            if (!ok && !firstInvalid) firstInvalid = field;
+        });
+        if (firstInvalid) firstInvalid.focus();
+        else toast('Delivery details saved', { tone: 'success' });
+    });
+    $('#details-form').addEventListener('reset', (e) => {
+        $$('[aria-invalid]', e.currentTarget).forEach((f) => f.removeAttribute('aria-invalid'));
+        $$('.sf-field-error', e.currentTarget).forEach((err) => { err.hidden = true; });
+    });
+</script>
+</body>
+</html>
