@@ -19,9 +19,9 @@
     8. Navbar           16. Empty state, footer, utilities
    ========================================================================== */
 
-/* Fonts. For production, move this to <link rel="preconnect"> + <link> tags
-   in index.html so the font request is not chained behind this file. */
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Tenor+Sans&display=swap');
+/* Fonts (Montserrat, Tenor Sans) are loaded by <link> tags in index.html, so the
+   font request is not chained behind this file. For a plain HTML page, add:
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Tenor+Sans&display=swap"> */
 
 
 /* 1. Tokens ================================================================

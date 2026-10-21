@@ -28,6 +28,7 @@
               }
             ],
             "styles": [
+              "src/ui-kit/storefront.css",
               "src/styles.css"
             ]
           },

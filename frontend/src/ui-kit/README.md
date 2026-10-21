@@ -14,7 +14,7 @@ The look (square corners, midnight indigo + golden bronze, Tenor Sans headings, 
 ## Preview
 
 ```bash
-npx serve ui-kit          # or: python3 -m http.server -d ui-kit
+npx serve frontend/src/ui-kit          # or: python3 -m http.server -d frontend/src/ui-kit
 ```
 
 Open `/demo.html`. Opening the file directly also works for the styles, but browsers block JS modules on `file://`, so the interactive parts need a local server.
@@ -31,13 +31,13 @@ Open `/demo.html`. Opening the file directly also works for the styles, but brow
 
 ## Angular
 
-1. **CSS.** When the Angular app is scaffolded, move this folder to `frontend/src/ui-kit/` and list the stylesheet first in `angular.json`:
+1. **CSS.** The kit lives in `frontend/src/ui-kit/`, and the stylesheet is listed first in `angular.json`:
 
    ```json
    "styles": ["src/ui-kit/storefront.css", "src/styles.css"]
    ```
 
-   For production, replace the `@import` at the top of `storefront.css` with `<link rel="preconnect">` + `<link>` tags in `index.html`.
+   The fonts are loaded with `<link rel="preconnect">` + `<link>` tags in `index.html`, not from the stylesheet.
 
 2. **JS.** Import only the helpers you need. Types come from `storefront.d.ts`.
 

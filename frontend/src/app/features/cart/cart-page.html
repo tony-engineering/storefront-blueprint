@@ -1,0 +1,130 @@
+<section class="sf-section">
+  <div class="sf-container">
+    <div class="sf-section-head">
+      <div>
+        <span class="sf-eyebrow">Checkout</span>
+        <h1>Your cart</h1>
+      </div>
+    </div>
+
+    @if (removedCount() > 0) {
+      <div class="sf-alert sf-alert-warning" role="status" style="margin-bottom: 1.5rem">
+        <div>
+          <strong class="sf-alert-title">Cart updated</strong>
+          {{ removedCount() === 1 ? 'One home is' : removedCount() + ' homes are' }} no longer for
+          sale and {{ removedCount() === 1 ? 'was' : 'were' }} removed from your cart.
+        </div>
+      </div>
+    }
+
+    @if (error(); as message) {
+      <div class="sf-alert sf-alert-danger" role="alert">
+        <div>
+          <strong class="sf-alert-title">Could not load prices</strong>
+          {{ message }}
+          <div style="margin-top: 0.75rem">
+            <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" (click)="loadCatalog()">
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    } @else if (!loaded()) {
+      <p class="sf-text-muted" role="status">Loading your cart…</p>
+    } @else if (lines().length === 0) {
+      <div class="sf-panel">
+        <div class="sf-empty">
+          <h4>Your cart is empty</h4>
+          <p>Browse the range and add a home to get started.</p>
+          <a routerLink="/" class="sf-btn sf-btn-primary sf-btn-sm">Browse homes</a>
+        </div>
+      </div>
+    } @else {
+      <div class="sf-split">
+        <section class="sf-panel">
+          <header class="sf-panel-head">
+            <h4>Items</h4>
+            <span class="sf-badge sf-badge-default"
+              >{{ cart.count() }} {{ cart.count() === 1 ? 'home' : 'homes' }}</span
+            >
+          </header>
+          <div class="sf-table-scroll">
+            <table class="sf-table">
+              <thead>
+                <tr>
+                  <th>Home</th>
+                  <th>Qty</th>
+                  <th class="is-num">Price</th>
+                  <th class="is-num">Total</th>
+                  <th class="is-actions"><span class="sf-visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of lines(); track line.product.id) {
+                  <tr>
+                    <td>
+                      <span class="sf-prod-name">{{ line.product.name }}</span>
+                    </td>
+                    <td>
+                      <div class="sf-qty">
+                        <button
+                          type="button"
+                          class="sf-qty-btn"
+                          aria-label="Decrease quantity"
+                          [disabled]="line.quantity <= 1"
+                          (click)="step(line, -1)"
+                        >
+                          −
+                        </button>
+                        <input
+                          #qty
+                          class="sf-qty-input"
+                          type="number"
+                          min="1"
+                          [max]="maxQuantity"
+                          inputmode="numeric"
+                          [value]="line.quantity"
+                          [attr.aria-label]="'Quantity, ' + line.product.name"
+                          (change)="typed(line, qty)"
+                        />
+                        <button
+                          type="button"
+                          class="sf-qty-btn"
+                          aria-label="Increase quantity"
+                          [disabled]="line.quantity >= maxQuantity"
+                          (click)="step(line, 1)"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
+                    <td class="is-num">{{ line.product.price | money }}</td>
+                    <td class="is-num">
+                      {{
+                        {
+                          amountMinor: line.product.price.amountMinor * line.quantity,
+                          currency: line.product.price.currency,
+                        } | money
+                      }}
+                    </td>
+                    <td class="is-actions">
+                      <button
+                        type="button"
+                        class="sf-btn sf-btn-ghost sf-btn-sm"
+                        (click)="cart.remove(line.product.id)"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <app-checkout [lines]="orderLines()" [total]="total()" (rejected)="loadCatalog()" />
+      </div>
+    }
+  </div>
+</section>

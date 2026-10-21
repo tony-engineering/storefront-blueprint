@@ -1,0 +1,139 @@
+<section class="sf-section">
+  <div class="sf-container sf-stack">
+    <div class="sf-section-head" style="margin-bottom: 0">
+      <div>
+        <span class="sf-eyebrow">Order</span>
+        <h1 class="app-mono">{{ id() }}</h1>
+      </div>
+      @if (order(); as o) {
+        <app-status-badge [status]="o.status" />
+      }
+    </div>
+
+    @if (loadError(); as message) {
+      <div class="sf-alert sf-alert-danger" role="alert">
+        <div><strong class="sf-alert-title">Order unavailable</strong>{{ message }}</div>
+      </div>
+    } @else if (order(); as o) {
+      <div aria-live="polite">
+        @if (status(); as s) {
+          <div [class]="'sf-alert sf-alert-' + s.tone" role="status">
+            <div>
+              <strong class="sf-alert-title">{{ s.label }}</strong>
+              {{ s.message }}
+              @if (o.failureReason) {
+                <span class="sf-text-muted">(Reason: {{ reason(o.failureReason) }}.)</span>
+              }
+            </div>
+          </div>
+        }
+        @if (connectionLost()) {
+          <p class="sf-text-muted" style="margin-top: 0.5rem">Connection lost. Still checking…</p>
+        }
+      </div>
+
+      @if (canPayAgain()) {
+        <section class="sf-panel">
+          <header class="sf-panel-head"><h4>Pay with another card</h4></header>
+          <div class="sf-panel-body sf-stack">
+            <div class="sf-form-group">
+              <label class="sf-label" for="retry-token">Mock payment outcome</label>
+              <select
+                class="sf-select"
+                id="retry-token"
+                [disabled]="paying()"
+                [ngModel]="paymentToken()"
+                (ngModelChange)="paymentToken.set($event)"
+              >
+                @for (token of tokens; track token.value) {
+                  <option [value]="token.value">{{ token.value }}: {{ token.label }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <button
+                type="button"
+                class="sf-btn sf-btn-primary"
+                [disabled]="paying()"
+                [class.is-loading]="paying()"
+                [attr.aria-busy]="paying() || null"
+                (click)="payAgain()"
+              >
+                {{ paying() ? 'Paying…' : 'Pay ' + (o.total | money) }}
+              </button>
+            </div>
+            @if (payError(); as message) {
+              <div class="sf-alert sf-alert-danger" role="alert">
+                <div><strong class="sf-alert-title">Payment not started</strong>{{ message }}</div>
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      <section class="sf-panel">
+        <header class="sf-panel-head"><h4>Items</h4></header>
+        <div class="sf-table-scroll">
+          <table class="sf-table">
+            <thead>
+              <tr>
+                <th>Home</th>
+                <th class="is-num">Qty</th>
+                <th class="is-num">Price</th>
+                <th class="is-num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of o.lines; track line.productId) {
+                <tr>
+                  <td>
+                    <span class="sf-prod-name">{{ line.productName }}</span>
+                  </td>
+                  <td class="is-num">{{ line.quantity }}</td>
+                  <td class="is-num">{{ line.unitPrice | money }}</td>
+                  <td class="is-num">{{ lineTotal(line) | money }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3">Total · {{ o.charged ? 'charged' : 'not charged' }}</td>
+                <td class="is-num">
+                  <strong>{{ o.total | money }}</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      @if (o.payments.length > 0) {
+        <section class="sf-panel">
+          <header class="sf-panel-head"><h4>Payment attempts</h4></header>
+          <div class="sf-table-scroll">
+            <table class="sf-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Result</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (payment of o.payments; track payment.number) {
+                  <tr>
+                    <td>{{ payment.number }}</td>
+                    <td>{{ payment.status }}</td>
+                    <td>{{ reason(payment.failureReason) || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    } @else {
+      <p class="sf-text-muted" role="status">Loading order…</p>
+    }
+  </div>
+</section>

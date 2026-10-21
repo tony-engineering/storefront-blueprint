@@ -1,0 +1,92 @@
+<section class="sf-section">
+  <div class="sf-container">
+    <div class="sf-section-head">
+      <div>
+        <span class="sf-eyebrow">Catalogue</span>
+        <h1>Our homes</h1>
+      </div>
+      @if (products(); as list) {
+        <p>{{ list.length }} {{ list.length === 1 ? 'home' : 'homes' }} · delivery included</p>
+      }
+    </div>
+
+    <div aria-live="polite">
+      @if (lastAdded(); as added) {
+        <div class="sf-alert sf-alert-success" role="status" style="margin-bottom: 1.5rem">
+          <div>
+            <strong class="sf-alert-title">Added to cart</strong>
+            {{ added.name }}. <a routerLink="/cart">View cart</a>
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (error(); as message) {
+      <div class="sf-alert sf-alert-danger" role="alert">
+        <div>
+          <strong class="sf-alert-title">Could not load the catalogue</strong>
+          {{ message }}
+          <div style="margin-top: 0.75rem">
+            <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" (click)="load()">
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    } @else if (products(); as list) {
+      @if (list.length === 0) {
+        <div class="sf-panel">
+          <div class="sf-empty">
+            <h4>No homes for sale right now</h4>
+            <p>Check back soon.</p>
+          </div>
+        </div>
+      } @else {
+        <div class="sf-product-grid">
+          @for (product of list; track product.id) {
+            <article class="sf-product-card">
+              <div class="sf-product-media">
+                <div class="sf-product-placeholder">
+                  <svg
+                    viewBox="0 0 64 64"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 30 32 9l26 21" />
+                    <path d="M12 25v31h40V25" />
+                    <path d="M27 56V41h10v15" />
+                    <path d="M17 33h7v7h-7zM40 33h7v7h-7z" />
+                  </svg>
+                </div>
+              </div>
+              <div class="sf-product-details">
+                <h2 class="sf-product-title">{{ product.name }}</h2>
+                @if (product.description) {
+                  <p class="sf-product-desc">{{ product.description }}</p>
+                }
+                <div class="sf-product-price-row">
+                  <div class="sf-price-box">
+                    <span class="sf-price">{{ product.price | money }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="sf-btn sf-btn-primary sf-btn-sm"
+                    [attr.aria-label]="'Add ' + product.name + ' to cart'"
+                    (click)="add(product)"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+      }
+    } @else {
+      <p class="sf-text-muted" role="status">Loading homes…</p>
+    }
+  </div>
+</section>

@@ -27,31 +27,36 @@ frontend/
 ├── nginx.conf               # serves the SPA, proxies /api to the api container
 ├── proxy.conf.json          # dev server: /api → http://localhost:8080
 └── src/
-    ├── ui-kit/              # storefront CSS/JS kit (moved here from the repo root later)
+    ├── ui-kit/              # storefront CSS/JS kit (storefront.css is listed first in angular.json)
     └── app/
-        ├── app.config.ts    # providers: router, HttpClient
+        ├── app.*            # shell: header with cart count, footer, router outlet
         ├── app.routes.ts    # lazy-loaded feature routes
-        ├── core/            # app-wide singletons
-        │   ├── api/         # typed API client
-        │   │   └── generated/   # generated from the API's OpenAPI spec, never edited by hand
-        │   ├── auth/        # JWT token storage, admin role guard
-        │   ├── http/        # interceptors: attach JWT, map ProblemDetails to messages
-        │   └── cart/        # signals-based cart service, persisted to localStorage
-        ├── shared/          # reusable, stateless building blocks
-        │   ├── components/  # e.g. order status badge
-        │   ├── pipes/       # e.g. money pipe (minor units → £)
-        │   └── models/      # Money, OrderStatus and other client-side types
-        └── features/        # one folder per page, lazy-loaded
-            ├── home/        # hello world placeholder
-            ├── products/    # product list
-            ├── cart/        # cart
-            ├── checkout/    # checkout + idempotency key + polling
-            ├── orders/      # order details / lookup
-            └── admin/
-                └── products/    # create / delete products (admin only)
+        ├── core/
+        │   ├── api/         # ApiService: the six API calls, typed
+        │   ├── http/        # problem.ts (ProblemDetails → message), idempotency.ts (key per attempt, safe retry)
+        │   └── cart/        # signals-based cart (ids + quantities), persisted to localStorage
+        ├── shared/
+        │   ├── models/      # wire types (hand-written from the API contract), money parsing
+        │   ├── pipes/       # money pipe (minor units → £)
+        │   └── components/  # order status badge
+        └── features/        # one folder per page
+            ├── products/    # /              product grid, add to cart
+            ├── cart/        # /cart          lines, quantities, totals, hosts checkout
+            ├── checkout/    #                summary + "Place order" (idempotent)
+            ├── orders/      # /orders, /orders/:id   lookup; status, polling, pay again
+            └── admin/products/   # /admin/products   create and delete (not guarded yet)
 ```
 
-Empty folders hold a `.gitkeep` until their first file lands.
+## How the pages handle failure
+
+- **Checkout** makes one `Idempotency-Key` per attempt and reuses it when the same request is retried (network error, 409, 502–504), so a retry can never create a second order or charge. The button is disabled while a request is in flight. Both 201 and 202 open the order page; a 422 (for example a product was deleted meanwhile) shows the server's message and refreshes the cart.
+- **Order page** polls every 2 s while the payment is unresolved (`Pending`, `PaymentRetrying`, `PaymentUnknown`) and stops at a final status or when the page is left. It keeps polling through temporary connection errors. For `PaymentFailed` and `PaymentUnavailable` (nothing was charged) it offers "Pay with another card", which uses a new key.
+- **Prices** are never sent: the cart stores ids and quantities, and the server computes the total.
+
+## Known gaps
+
+- The admin page has no sign-in. The API has no token endpoint yet (ARCHITECTURE.md §9), so a guard and the JWT interceptor are left out until it has.
+- API types are written by hand; there is no client code generator (ARCHITECTURE.md §11).
 
 ## Docker
 

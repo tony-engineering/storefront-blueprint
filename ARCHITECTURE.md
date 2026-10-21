@@ -72,12 +72,7 @@ Three containers locally (`web`, `api`, `db`). No message broker, no separate pa
 │   ├── tests/Storefront.IntegrationTests/
 │   └── Dockerfile
 ├── frontend/                    # Angular app + Dockerfile + nginx.conf
-├── ui-kit/                      # storefront CSS/JS kit, no dependencies, no build step
-│   ├── storefront.css           # design tokens + all components (sf- prefix)
-│   ├── storefront.js            # helpers: formatMoney, orderStatus, modal, toast, withBusy
-│   ├── storefront.d.ts          # types so strict TypeScript / Angular can import the helpers
-│   ├── demo.html                # every component on one page, for preview
-│   └── README.md                # usage in plain HTML and Angular
+│   └── src/ui-kit/              # storefront CSS/JS kit (sf- classes), no build step; see its README
 ├── loadtests/                   # k6 scripts
 ├── .github/workflows/
 │   ├── ci.yml                   # every push
@@ -88,7 +83,7 @@ Three containers locally (`web`, `api`, `db`). No message broker, no separate pa
 └── README.md
 ```
 
-`ui-kit/` sits at the root for now so it can be previewed on its own (`npx serve ui-kit`). When the Angular app is scaffolded it moves to `frontend/src/ui-kit/` and `storefront.css` is listed first under `styles` in `angular.json`.
+The UI kit lives in `frontend/src/ui-kit/`; `storefront.css` is listed first under `styles` in `angular.json`, and `demo.html` there can be previewed on its own (`npx serve frontend/src/ui-kit`).
 
 One API project organised by feature. Splitting into Domain / Application / Infrastructure projects adds ceremony without benefit at this size; it is the natural next step if the codebase grows.
 
@@ -317,10 +312,10 @@ api:
 
 ## 11. Frontend
 
-- **Pages:** product list, cart, checkout, order details / lookup, admin products (route guarded by role).
+- **Pages:** product list, cart, checkout, order details / lookup, admin products. The admin route is not guarded yet because the API has no token endpoint; the guard and the JWT interceptor are added together with it.
 - **Cart** is a signals-based service, persisted to `localStorage`.
 - **Checkout** creates the idempotency key when the page opens and reuses it for retries. It disables the submit button while a request is in flight, shows each outcome distinctly, and polls `GET /api/orders/{id}` while the status is `PaymentUnknown`.
-- An HTTP interceptor attaches the JWT and maps ProblemDetails to user-facing messages.
+- ProblemDetails errors are mapped to user-facing messages by one helper (`core/http/problem.ts`); an HTTP interceptor that attaches the JWT comes with auth.
 - API access is a thin, hand-typed layer: TypeScript interfaces mirroring the documented request and response shapes, called through Angular's `HttpClient`. There is no client code generator: with three resources and a handful of DTOs, generated code would add tooling and noise without much safety. The OpenAPI document stays accurate (typed responses, ProblemDetails errors, admin security) so it serves as the contract the interfaces are written against.
 - Styling comes from `ui-kit/` (adapted from a free storefront HTML/CSS kit): global `sf-` classes, no Bootstrap. Components bind state in templates rather than calling the kit's DOM helpers; `formatMoney` backs a `money` pipe and `orderStatus` drives status badges, so the UI shares the API's minor-units money model and order states.
 
