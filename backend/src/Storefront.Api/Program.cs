@@ -12,8 +12,7 @@ builder.Services.AddApiDocs();
 builder.Services.AddPersistence();
 
 // Numbers must be JSON numbers: "1999" is rejected for a price. ASP.NET's web defaults accept
-// numeric strings, which would also make the OpenAPI schema (and the generated Angular client)
-// type every number as `number | string`.
+// numeric strings, which would also make the OpenAPI schema type every number as `number | string`.
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 

@@ -305,7 +305,7 @@ api:
 - 401 without a token, 403 with a non-admin token.
 - The token endpoint and its hardcoded users exist only in the Development environment.
 - API docs (`/openapi/v1.json` and Swagger UI at `/swagger`) are public in every environment, so anyone can read the contract and send requests from the browser without logging in. Admin operations still need a bearer token, entered with **Authorize**. Set `ApiDocs:Enabled=false` to hide the docs on a public deployment.
-- JSON numbers must be real numbers (`NumberHandling.Strict`): a price sent as `"1999"` is a 400, and the OpenAPI schema types numbers as `integer` only, which keeps the generated Angular client's types exact.
+- JSON numbers must be real numbers (`NumberHandling.Strict`): a price sent as `"1999"` is a 400, and the OpenAPI schema types numbers as `integer` only, which keeps the documented types exact for anyone reading the spec.
 - Signing key comes from configuration (user secrets / environment variable), never committed.
 - Input validation on every write endpoint: non-empty names, positive prices, quantities 1–100, at most 50 lines, no duplicate product IDs.
 
@@ -321,7 +321,7 @@ api:
 - **Cart** is a signals-based service, persisted to `localStorage`.
 - **Checkout** creates the idempotency key when the page opens and reuses it for retries. It disables the submit button while a request is in flight, shows each outcome distinctly, and polls `GET /api/orders/{id}` while the status is `PaymentUnknown`.
 - An HTTP interceptor attaches the JWT and maps ProblemDetails to user-facing messages.
-- Typed API client generated from the OpenAPI spec.
+- API access is a thin, hand-typed layer: TypeScript interfaces mirroring the documented request and response shapes, called through Angular's `HttpClient`. There is no client code generator: with three resources and a handful of DTOs, generated code would add tooling and noise without much safety. The OpenAPI document stays accurate (typed responses, ProblemDetails errors, admin security) so it serves as the contract the interfaces are written against.
 - Styling comes from `ui-kit/` (adapted from a free storefront HTML/CSS kit): global `sf-` classes, no Bootstrap. Components bind state in templates rather than calling the kit's DOM helpers; `formatMoney` backs a `money` pipe and `orderStatus` drives status badges, so the UI shares the API's minor-units money model and order states.
 
 ## 12. Testing strategy
@@ -447,7 +447,7 @@ docker compose up --build web          # same: web pulls in api, which waits for
 |---|---|
 | http://localhost:4200 | Storefront |
 | http://localhost:8080/swagger | API docs and manual calls |
-| http://localhost:8080/openapi/v1.json | OpenAPI document (source for the Angular client) |
+| http://localhost:8080/openapi/v1.json | OpenAPI document (the API contract the frontend types follow) |
 | http://localhost:8080/health | Health check |
 
 nginx in the `web` container proxies `/api` to the `api` container, so the browser sees one origin and CORS is not needed. It re-resolves `api` through Docker's DNS, so rebuilding or restarting the API (`docker compose up -d --build api`) does not require restarting `web`. PostgreSQL is published on `127.0.0.1:5432` only, to inspect the database from the host.
