@@ -1,0 +1,192 @@
+# CI: runs on every push to main and on pull requests (ARCHITECTURE.md §13).
+#
+# Four independent chains start together; the only ordering is
+# backend-unit -> backend-integration.
+#
+# Every third-party action is pinned to a full commit SHA, with its version in a
+# comment. A tag can be moved to different code; a SHA cannot.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  NODE_VERSION: "22"
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+  backend-unit:
+    name: backend-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # setup-dotnet's own cache needs packages.lock.json files, which the repo doesn't use.
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'backend/**/Directory.*.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore tests/Storefront.UnitTests
+
+      - name: Build
+        run: dotnet build tests/Storefront.UnitTests --no-restore --configuration Release
+
+      - name: Test
+        run: >
+          dotnet test tests/Storefront.UnitTests
+          --no-build --configuration Release
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=unit-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unit-test-results
+          path: backend/TestResults/*.trx
+          if-no-files-found: warn
+
+  backend-integration:
+    name: backend-integration
+    needs: backend-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # TEMPORARY: the integration tests were written before the backend (test-first) and
+    # fail until it is implemented. Failures stay visible in the run but don't turn it red.
+    # Remove this line once the backend makes them pass (ARCHITECTURE.md §13).
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'backend/**/Directory.*.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore tests/Storefront.IntegrationTests
+
+      - name: Build
+        run: dotnet build tests/Storefront.IntegrationTests --no-restore --configuration Release
+
+      # Testcontainers starts PostgreSQL through the runner's Docker; ubuntu-latest has it.
+      - name: Test
+        run: >
+          dotnet test tests/Storefront.IntegrationTests
+          --no-build --configuration Release
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=integration-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-test-results
+          path: backend/TestResults/*.trx
+          if-no-files-found: warn
+
+  # Docker builds don't wait for tests: they check packaging, not behaviour, and a
+  # failing test should not hide a broken image. Images are tagged with the commit SHA
+  # and not pushed yet.
+  backend-docker:
+    name: backend-docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build storefront-api image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./backend
+          push: false
+          tags: storefront-api:${{ github.sha }}
+          cache-from: type=gha,scope=storefront-api
+          cache-to: type=gha,scope=storefront-api,mode=max
+
+  # The frontend is built once per run, here: the Dockerfile runs
+  # `ng build --configuration production`, so AOT errors and bundle budgets fail this job.
+  frontend-docker:
+    name: frontend-docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build storefront-web image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./frontend
+          push: false
+          tags: storefront-web:${{ github.sha }}
+          cache-from: type=gha,scope=storefront-web
+          cache-to: type=gha,scope=storefront-web,mode=max
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NG_CLI_ANALYTICS: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:ci
