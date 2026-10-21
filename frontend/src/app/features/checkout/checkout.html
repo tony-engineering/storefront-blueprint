@@ -1,0 +1,52 @@
+<aside class="sf-panel">
+  <header class="sf-panel-head"><h4>Summary</h4></header>
+  <div class="sf-panel-body sf-stack">
+    <div class="sf-summary">
+      <div class="sf-summary-row">
+        <span>Subtotal</span><span>{{ total() | money }}</span>
+      </div>
+      <div class="sf-summary-row">
+        <span>Delivery &amp; levelling</span><span class="sf-text-success">Free</span>
+      </div>
+      <div class="sf-summary-row sf-summary-total">
+        <span>Total</span><span>{{ total() | money }}</span>
+      </div>
+    </div>
+
+    <div class="sf-form-group">
+      <label class="sf-label" for="pay-token">Mock payment outcome</label>
+      <select
+        class="sf-select"
+        id="pay-token"
+        [disabled]="placing()"
+        [ngModel]="paymentToken()"
+        (ngModelChange)="paymentToken.set($event)"
+      >
+        @for (token of tokens; track token.value) {
+          <option [value]="token.value">{{ token.value }}: {{ token.label }}</option>
+        }
+      </select>
+      <span class="sf-field-hint">Picks what the mock payment provider does.</span>
+    </div>
+
+    <button
+      type="button"
+      class="sf-btn sf-btn-primary sf-btn-block sf-btn-lg"
+      [disabled]="placing() || lines().length === 0"
+      [class.is-loading]="placing()"
+      [attr.aria-busy]="placing() || null"
+      (click)="placeOrder()"
+    >
+      {{ placing() ? 'Placing order…' : 'Place order' }}
+    </button>
+
+    @if (error(); as e) {
+      <div class="sf-alert sf-alert-danger" role="alert">
+        <div>
+          <strong class="sf-alert-title">{{ e.title }}</strong
+          >{{ e.message }}
+        </div>
+      </div>
+    }
+  </div>
+</aside>

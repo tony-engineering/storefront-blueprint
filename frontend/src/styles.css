@@ -1,1 +1,17 @@
-/* You can add global styles to this file, and also import other style files */
+/* App-wide styles. Components and tokens come from src/ui-kit/storefront.css (loaded first). */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-shell > main {
+  flex: 1;
+}
+
+.app-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  word-break: break-all;
+}

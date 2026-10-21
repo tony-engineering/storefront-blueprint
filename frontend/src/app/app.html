@@ -1,1 +1,90 @@
-<router-outlet />
+<div class="app-shell">
+  <header class="sf-topnav">
+    <div class="sf-topstrip">Demo store: payments are mocked, no real money moves</div>
+    <div class="sf-nav-main">
+      <a routerLink="/" class="sf-logo"
+        ><span class="sf-logo-icon">T</span><span>Tiny Haven</span></a
+      >
+
+      <nav class="sf-nav-links" id="main-nav" aria-label="Main" [class.is-open]="menuOpen()">
+        <a
+          routerLink="/"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          ariaCurrentWhenActive="page"
+          class="sf-nav-link"
+          >Homes</a
+        >
+        <a
+          routerLink="/orders"
+          routerLinkActive="active"
+          ariaCurrentWhenActive="page"
+          class="sf-nav-link"
+          >Track order</a
+        >
+        <a
+          routerLink="/admin/products"
+          routerLinkActive="active"
+          ariaCurrentWhenActive="page"
+          class="sf-nav-link"
+          >Admin <span class="sf-badge sf-badge-default">Staff</span></a
+        >
+      </nav>
+
+      <div class="sf-nav-actions">
+        <a routerLink="/cart" class="sf-btn sf-btn-primary sf-cart-btn">
+          <svg
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            stroke="currentColor"
+            stroke-width="2.5"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
+          <span class="sf-cart-label">Cart</span>
+          <span class="sf-cart-count">{{ cart.count() || '' }}</span
+          ><span class="sf-visually-hidden"> items</span>
+        </a>
+        <button
+          type="button"
+          class="sf-btn sf-btn-ghost sf-btn-icon sf-nav-toggle"
+          aria-controls="main-nav"
+          aria-label="Menu"
+          [attr.aria-expanded]="menuOpen()"
+          (click)="menuOpen.set(!menuOpen())"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            stroke="currentColor"
+            stroke-width="2"
+            fill="none"
+            aria-hidden="true"
+          >
+            <line x1="3" y1="7" x2="21" y2="7" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="17" x2="21" y2="17" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <router-outlet />
+  </main>
+
+  <footer class="sf-footer">
+    <div class="sf-footer-bottom">
+      <div class="sf-container sf-footer-bottom-inner">
+        <span>© 2026 Tiny Haven · Demo storefront, no real orders are taken.</span>
+      </div>
+    </div>
+  </footer>
+</div>

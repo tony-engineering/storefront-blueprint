@@ -1,0 +1,165 @@
+<section class="sf-section">
+  <div class="sf-container sf-stack">
+    <div class="sf-section-head" style="margin-bottom: 0">
+      <div>
+        <span class="sf-eyebrow">Admin</span>
+        <h1>Products</h1>
+      </div>
+      <p>No sign-in yet: the API has no authentication.</p>
+    </div>
+
+    <form class="sf-panel" [formGroup]="form" (ngSubmit)="create()" novalidate>
+      <header class="sf-panel-head"><h4>New product</h4></header>
+      <div class="sf-panel-body sf-form-grid">
+        <div class="sf-form-group">
+          <label class="sf-label" for="p-name">Name</label>
+          <input
+            class="sf-input"
+            id="p-name"
+            formControlName="name"
+            aria-describedby="p-name-error"
+          />
+          @if (form.controls.name.touched && form.controls.name.invalid) {
+            <span class="sf-field-error" id="p-name-error"
+              >Enter a name (at most 200 characters).</span
+            >
+          }
+        </div>
+        <div class="sf-form-group">
+          <label class="sf-label" for="p-price">Price (£)</label>
+          <input
+            class="sf-input"
+            id="p-price"
+            formControlName="price"
+            inputmode="decimal"
+            placeholder="38500.00"
+            aria-describedby="p-price-error"
+          />
+          @if (form.controls.price.touched && form.controls.price.invalid) {
+            <span class="sf-field-error" id="p-price-error"
+              >Enter a price in pounds, e.g. 38500 or 19.99.</span
+            >
+          }
+        </div>
+        <div class="sf-form-group sf-span-2">
+          <label class="sf-label" for="p-description">Description (optional)</label>
+          <textarea class="sf-textarea" id="p-description" formControlName="description"></textarea>
+        </div>
+        @if (saveError(); as message) {
+          <div class="sf-alert sf-alert-danger sf-span-2" role="alert">
+            <div><strong class="sf-alert-title">Product not created</strong>{{ message }}</div>
+          </div>
+        }
+        @if (saved(); as name) {
+          <div class="sf-alert sf-alert-success sf-span-2" role="status">
+            <div>
+              <strong class="sf-alert-title">Product created</strong>{{ name }} is now in the
+              catalogue.
+            </div>
+          </div>
+        }
+      </div>
+      <footer class="sf-panel-foot">
+        <button
+          type="submit"
+          class="sf-btn sf-btn-primary"
+          [disabled]="saving()"
+          [class.is-loading]="saving()"
+          [attr.aria-busy]="saving() || null"
+        >
+          {{ saving() ? 'Creating…' : 'Create product' }}
+        </button>
+      </footer>
+    </form>
+
+    <section class="sf-panel">
+      <header class="sf-panel-head">
+        <h4>Catalogue</h4>
+        @if (products(); as list) {
+          <span class="sf-badge sf-badge-default">{{ list.length }} live</span>
+        }
+      </header>
+
+      @if (deleteError(); as message) {
+        <div class="sf-panel-body">
+          <div class="sf-alert sf-alert-danger" role="alert">
+            <div><strong class="sf-alert-title">Not deleted</strong>{{ message }}</div>
+          </div>
+        </div>
+      }
+
+      @if (listError(); as message) {
+        <div class="sf-panel-body">
+          <div class="sf-alert sf-alert-danger" role="alert">
+            <div>
+              {{ message }}
+              <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" (click)="load()">
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      } @else if (products(); as list) {
+        <div class="sf-table-scroll">
+          <table class="sf-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="is-num">Price</th>
+                <th class="is-actions"><span class="sf-visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (product of list; track product.id) {
+                <tr>
+                  <td>
+                    <span class="sf-prod-name">{{ product.name }}</span>
+                    <span class="sf-prod-meta app-mono">{{ product.id }}</span>
+                  </td>
+                  <td class="is-num">{{ product.price | money }}</td>
+                  <td class="is-actions">
+                    <button
+                      type="button"
+                      class="sf-btn sf-btn-ghost sf-btn-sm sf-text-danger"
+                      [disabled]="deletingId() === product.id"
+                      [class.is-loading]="deletingId() === product.id"
+                      (click)="askDelete(product)"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="3" class="sf-text-muted">No products.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="sf-panel-body"><p class="sf-text-muted" role="status">Loading…</p></div>
+      }
+    </section>
+  </div>
+</section>
+
+<dialog #confirmDelete class="sf-modal" aria-labelledby="delete-title" (close)="onDialogClose()">
+  <form method="dialog">
+    <header class="sf-modal-head">
+      <div class="sf-modal-title-row">
+        <span class="sf-modal-ico is-danger" aria-hidden="true">!</span>
+        <div>
+          <h4 id="delete-title">Delete product?</h4>
+          <p class="sf-modal-meta">
+            {{ pendingDelete()?.name }} leaves the catalogue. Existing orders keep it.
+          </p>
+        </div>
+      </div>
+    </header>
+    <footer class="sf-modal-foot">
+      <button class="sf-btn sf-btn-outline" value="cancel">Cancel</button>
+      <button class="sf-btn sf-btn-danger" value="confirm">Delete</button>
+    </footer>
+  </form>
+</dialog>

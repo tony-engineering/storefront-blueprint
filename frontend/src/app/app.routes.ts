@@ -1,12 +1,33 @@
 import { Routes } from '@angular/router';
 
-// Feature pages (products, cart, checkout, orders, admin) are added as
-// lazy-loaded routes here, one folder per feature under features/.
+// One lazy-loaded route per feature folder. No auth guard on admin yet:
+// the API has no token endpoint, so the admin page stays open until it does.
 export const routes: Routes = [
   {
     path: '',
-    loadComponent: () => import('./features/home/home').then((m) => m.Home),
-    title: 'Storefront',
+    loadComponent: () => import('./features/products/product-list').then((m) => m.ProductList),
+    title: 'Homes · Tiny Haven',
+  },
+  {
+    path: 'cart',
+    loadComponent: () => import('./features/cart/cart-page').then((m) => m.CartPage),
+    title: 'Cart · Tiny Haven',
+  },
+  {
+    path: 'orders',
+    loadComponent: () => import('./features/orders/order-lookup').then((m) => m.OrderLookup),
+    title: 'Track an order · Tiny Haven',
+  },
+  {
+    path: 'orders/:id',
+    loadComponent: () => import('./features/orders/order-details').then((m) => m.OrderDetails),
+    title: 'Order · Tiny Haven',
+  },
+  {
+    path: 'admin/products',
+    loadComponent: () =>
+      import('./features/admin/products/admin-products').then((m) => m.AdminProducts),
+    title: 'Admin: products · Tiny Haven',
   },
   { path: '**', redirectTo: '' },
 ];
