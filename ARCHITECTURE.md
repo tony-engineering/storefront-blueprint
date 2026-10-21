@@ -139,11 +139,12 @@ Transitions live in the `Order` entity (`MarkPaid()`, `MarkFailed(reason)`, …)
 | Method | Route | Auth | Success | Notes |
 |---|---|---|---|---|
 | GET | `/api/products` | public | 200 | Excludes soft-deleted products |
+| GET | `/api/products/{id}` | public | 200 | 404 if unknown or deleted. Target of the `Location` header after a product is created |
 | POST | `/api/orders` | public | 201 / 202 | Requires `Idempotency-Key` header |
 | GET | `/api/orders/{id}` | public | 200 | 404 if unknown |
 | POST | `/api/orders/{id}/payments` | public | 201 / 202 | New payment attempt (e.g. another card). Requires `Idempotency-Key`. Only from `PaymentFailed` or `PaymentUnavailable`; otherwise **409** |
 | POST | `/api/admin/products` | Admin | 201 + `Location` | Validated |
-| DELETE | `/api/admin/products/{id}` | Admin | 204 | Soft delete; idempotent (deleting twice is still 204) |
+| DELETE | `/api/admin/products/{id}` | Admin | 204 | Soft delete; idempotent (deleting twice is still 204); 404 if the ID never existed |
 | POST | `/api/auth/token` | public, **Development only** | 200 | Hardcoded `admin` / `customer` users |
 
 Order IDs are GUIDs, so they cannot be enumerated. In production, order retrieval would be scoped to the authenticated customer.
@@ -163,6 +164,10 @@ The client generates one UUID per checkout attempt and sends it as `Idempotency-
 **Concurrency:** the key column has a **unique index**. The first request inserts an `InProgress` record; a concurrent request with the same key hits the constraint violation and gets 409 or the stored replay. Correctness comes from the database, not from in-process locks, so it still holds with several API instances. The `InProgress` record is committed in its own short transaction before the gateway is called, so concurrent requests see it immediately. A violation surfaces as `PostgresException` with `SqlState == PostgresErrorCodes.UniqueViolation` (`23505`), detected in one helper.
 
 The request hash is SHA-256 over a canonical form of the body (lines sorted by product ID).
+
+**A request that died half way.** An `InProgress` record older than one minute belongs to a process that is gone. If it had already saved an order, a repeat of the key is answered with that order's *current* state (still flagged `Idempotent-Replayed`). If it had not, nothing happened yet, so the repeat takes the key over with a single compare-and-set `UPDATE` that only one of several competing requests can win. If the request fails with an exception before an order exists, its record is deleted so the client can retry immediately. Finished responses are stored with a separate `UPDATE` after the order is saved; a crash between the two is what the rule above recovers from.
+
+Business rejections (unknown or deleted product, order not payable) are stored like any other final response, so a repeat of the key gets the same answer. Malformed input (validation errors, a bad key header) is rejected *before* a key is claimed and stores nothing.
 
 ## 7. Partial failures — payment flow
 
@@ -232,7 +237,8 @@ With the defaults, calls happen at 0, 2, 6, 14, 30 and 62 s. A 30-second outage 
 A `BackgroundService` that every few seconds calls `IPaymentReconciler.RunOnceAsync`, which processes every payment attempt that is due:
 
 - **`PaymentRetrying`**: charges again with the same idempotency key, following the retry policy above. After the last allowed call, the order becomes `PaymentUnavailable`.
-- **`PaymentUnknown`**: calls `IPaymentGateway.GetStatusAsync(attemptId)` only. It **never charges again**, because the first charge may have gone through. It applies backoff per attempt and moves the order to `NeedsAttention` after a configurable number of checks.
+- **`Pending` for over a minute** (`Payments:Reconciler:PendingGracePeriod`): the process died after saving the order and before the provider answered. It is handled like a timeout: the order becomes `PaymentUnknown` and the attempt is looked up, never charged again.
+- **`PaymentUnknown`**: calls `IPaymentGateway.GetStatusAsync(attemptId)` only. It **never charges again**, because the first charge may have gone through. A confirmed charge makes the order `Paid`; a provider that says it never processed the charge makes it `PaymentFailed` with reason `payment_not_processed` (the customer may then pay again); an unanswered lookup is repeated with backoff (`Payments:StatusCheck:*`, default 5 s doubling to 1 min) and, after `MaxChecks` (6) tries, the order becomes `NeedsAttention`. Each pass saves with the order's `xmin` check; if the order changed meanwhile the pass skips it and the next pass looks again, which is safe because retries repeat the same idempotent call and lookups only read.
 
 Keeping the pass in `RunOnceAsync`, separate from the loop, lets the integration tests drive it step by step against a fake clock.
 
@@ -328,6 +334,8 @@ Fast, no I/O. Only for logic that the integration tests cannot reach well throug
 - **Request hashing:** equivalent bodies produce the same hash (lines in a different order, the same product split across two lines, formatting differences); different bodies do not. These cases decide whether a retry counts as the same request, and are tedious to set up over HTTP.
 - **Money arithmetic:** line and order totals in minor units, currency mismatch rejected, no rounding drift.
 
+- **Retry schedule and mock gateway:** the backoff gives calls at 0, 2, 6, 14, 30 and 62 s and caps at one minute; each of the six `tok_*` tokens behaves as documented (the integration tests replace the mock with a scripted gateway, so its own promises are checked here).
+
 Everything else is left to the integration tests on purpose: payment outcome mapping, reconciler decisions (resolve, back off, give up) and validation are already exercised end to end with the fake clock and scripted gateway, so unit tests there would duplicate them.
 
 ### Integration tests — `Storefront.IntegrationTests`
@@ -339,16 +347,12 @@ Everything else is left to the integration tests on purpose: payment outcome map
 - **Migrations are applied once** per run. **Respawn** (`DbAdapter.Postgres`, ignoring `__EFMigrationsHistory`) deletes all rows before each test (`IAsyncLifetime`), then the test boots a fresh API instance, whose startup `DbSeeder` re-inserts the catalog. Each test starts from a known state without paying for a new container.
 - Tests go through real HTTP with `HttpClient`.
 
-Scenarios:
-- Same `Idempotency-Key` twice → one order, identical responses, `Idempotent-Replayed: true` on the second.
-- **10 parallel requests with one key → exactly one order**; the rest get 409 or the replayed response. These are genuinely concurrent transactions on PostgreSQL, so the test proves the unique-constraint design rather than passing by accident.
-- Checkout and reconciler updating the same order concurrently → one wins, no lost update (`xmin` row version).
-- Same key, different body → 422. Missing key → 400.
-- Each payment token → expected status and HTTP code; `tok_timeout` resolves to `Paid` via the reconciler.
-- **Checkout payment scenarios** (`Payments/CheckoutPaymentTests.cs`): paid first time; declined and abandoned (never retried automatically); declined then paid with another card on the same order; provider down for 30 s then `Paid`; provider down for hours → retry limit → `PaymentUnavailable`, not charged. Each also checks that the customer was charged at most once, for exactly the total. The contract these tests expect is in the test project's `README.md`.
-- Ordering a deleted product → 422; old orders still show the deleted product's snapshot.
-- Admin endpoints: 401 anonymous, 403 customer, 201/204 admin.
-- Client-supplied prices are ignored.
+Scenarios, by file:
+- **`Orders/IdempotencyTests`**: same key twice → one order, identical response, `Idempotent-Replayed: true` on the second; replay returns what the customer was told then, even after the order has changed; **10 parallel requests with one key → exactly one order** (the rest get 409 `Retry-After: 1` or the replay; one provider call, one charge); same key with a different body → 422; missing, malformed or all-zero key → 400; paying again twice with one key → one charge; **5 parallel "pay again" requests with different keys → exactly one wins**, the rest get 409. These are genuinely concurrent transactions on PostgreSQL, so the tests prove the unique-constraint and `xmin` design rather than passing by accident.
+- **`Orders/OrderApiTests`**: retrieved order equals the created one, lines in the order placed; 404 for an unknown order; client-supplied prices and totals are ignored; validation (no lines, more than 50, quantity outside 1–100, the same product twice, missing token, a number sent as text, malformed JSON) → 400 with per-field errors and no provider call; unknown or soft-deleted product → 422; a rejection is replayed for the same key; a paid order cannot be paid again (409).
+- **`Payments/CheckoutPaymentTests`**: paid first time; declined and abandoned (never retried automatically); declined then paid with another card on the same order; provider down for 30 s then `Paid`; provider down for hours → retry limit → `PaymentUnavailable`, not charged. Each also checks that the customer was charged at most once, for exactly the total. The contract these tests expect is in the test project's `README.md`.
+- **`Payments/UnknownOutcomeTests`**: timeout where the charge went through → 202 `PaymentUnknown`, then `Paid` by status lookup, with exactly one charge call; timeout where nothing was charged → `PaymentFailed` (`payment_not_processed`) and the customer can pay again; an order with an unknown outcome cannot be paid again (409); a provider that never answers the lookups → `NeedsAttention`, left alone afterwards.
+- **`Products/AdminProductTests`**: catalog is public; create/delete → 401 without a token, 403 for a customer, 201/204 for an admin; created products appear in the catalog; invalid products → 400; deleting twice is still 204 and an unknown ID is 404; **deleting a product does not rewrite orders already placed** but the product can no longer be ordered; garbage token → 401; wrong credentials get no token.
 
 **Why not an in-process in-memory database for tests?** The EF Core InMemory provider has no transactions or unique constraints, so the idempotency tests would pass without testing anything. SQLite in-memory enforces constraints but serialises all writers, so it cannot reproduce concurrent transactions. Running the same PostgreSQL-on-tmpfs container as the app costs a few seconds of container start-up per run and removes any gap between what is tested and what runs.
 
@@ -406,7 +410,7 @@ flowchart LR
 - **Integration after unit:** unit tests take seconds and need no Docker. If they fail, the integration tests would mostly report the same bug through HTTP, after a PostgreSQL container start. On a green run the cost is that integration tests start a few seconds later.
 - **Docker builds don't wait for tests:** they check different things (Dockerfiles, packaging, the production build), and a failing test should not hide a broken image. Running them alongside the tests reports every failure in one run and keeps the wall-clock time to the longest chain.
 - **The frontend is built once per run**, inside `frontend-docker`; the `frontend` job only lints and tests.
-- Every job must pass for the run to be green, with one temporary exception: the integration tests were written before the backend (test-first) and fail until it is implemented, so `backend-integration` runs with `continue-on-error: true`. Its failures stay visible in the run; the flag is removed once the backend makes them pass.
+- Every job must pass for the run to be green. The integration tests were written before the backend (test-first); while the backend was being built `backend-integration` ran with `continue-on-error: true` so its failures stayed visible without turning the run red. The flag was removed once the backend made them pass.
 - **Image tags:** each image is tagged with the full commit SHA (`github.sha`), so an image always maps to exactly one commit. Images are not pushed yet; pushing to a registry and moving a `latest` tag come later.
 - **Actions pinned to commit SHAs:** every third-party action is referenced by its full commit SHA, with the version in a comment (`actions/checkout@<sha> # v5`). A tag can be moved to different code; a SHA cannot, which matters once the pipeline can deploy code that handles payments.
 - Test results are published as TRX files and uploaded as artifacts, so failures are readable in the Actions UI.

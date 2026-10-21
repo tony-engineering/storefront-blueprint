@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using Storefront.Api.Idempotency;
 
 namespace Storefront.Api.Features.Orders;
 
@@ -9,40 +11,107 @@ public static class OrderEndpoints
         "A UUID identifying this attempt, e.g. one generated when the checkout page opens. " +
         "Reuse it to retry safely; use a new one for a new attempt.";
 
+    public static IServiceCollection AddOrders(this IServiceCollection services)
+    {
+        services.AddScoped<IValidator<CreateOrderRequest>, CreateOrderRequestValidator>();
+        services.AddScoped<IValidator<RetryPaymentRequest>, RetryPaymentRequestValidator>();
+        services.AddScoped<IdempotencyExecutor>();
+        services.AddScoped<OrderService>();
+        return services;
+    }
+
     public static IEndpointRouteBuilder MapOrderEndpoints(this IEndpointRouteBuilder app)
     {
         var orders = app.MapGroup("/api/orders")
             .WithTags("Orders");
 
-        orders.MapPost("", (
-                [FromHeader(Name = "Idempotency-Key"), Description(IdempotencyKeyDescription)] string? idempotencyKey,
-                CreateOrderRequest request) =>
-                NotImplementedYet.Problem("Creating an order"))
+        orders.MapPost("", CreateOrderAsync)
             .WithName("CreateOrder")
             .WithSummary("Create an order and pay for it")
             .WithDescription(
                 "Prices are computed by the server from the product IDs. " +
                 "201 when the payment outcome is known (paid or declined); 202 while it is still being resolved " +
-                "(poll `GET /api/orders/{id}`). The `paymentToken` picks the mock payment outcome.");
+                "(poll `GET /api/orders/{id}`). The `paymentToken` picks the mock payment outcome.")
+            .Produces<OrderDto>(StatusCodes.Status201Created)
+            .Produces<OrderDto>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
-        orders.MapGet("/{id:guid}", (Guid id) =>
-                NotImplementedYet.Problem("Retrieving an order"))
+        orders.MapGet("/{id:guid}", GetOrderAsync)
             .WithName("GetOrder")
             .WithSummary("Get an order")
-            .WithDescription("Returns the order, its lines and its payment attempts. 404 if the ID is unknown.");
+            .WithDescription("Returns the order, its lines and its payment attempts. 404 if the ID is unknown.")
+            .Produces<OrderDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
-        orders.MapPost("/{id:guid}/payments", (
-                Guid id,
-                [FromHeader(Name = "Idempotency-Key"), Description(IdempotencyKeyDescription)] string? idempotencyKey,
-                RetryPaymentRequest request) =>
-                NotImplementedYet.Problem("Paying an existing order"))
+        orders.MapPost("/{id:guid}/payments", RetryPaymentAsync)
             .WithName("RetryPayment")
             .WithSummary("Pay again for an existing order")
             .WithDescription(
                 "Starts a new payment attempt, e.g. with another card. " +
-                "Only allowed when the order is `PaymentFailed` or `PaymentUnavailable`; otherwise 409.");
+                "Only allowed when the order is `PaymentFailed` or `PaymentUnavailable`; otherwise 409.")
+            .Produces<OrderDto>(StatusCodes.Status201Created)
+            .Produces<OrderDto>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         return app;
+    }
+
+    private static async Task<IResult> CreateOrderAsync(
+        [FromHeader(Name = "Idempotency-Key"), Description(IdempotencyKeyDescription)] string? idempotencyKey,
+        CreateOrderRequest request,
+        IValidator<CreateOrderRequest> validator,
+        IdempotencyExecutor idempotency,
+        OrderService service,
+        CancellationToken cancellationToken)
+    {
+        if (await Problems.ValidateAsync(validator, request, cancellationToken) is { } invalid)
+        {
+            return invalid;
+        }
+
+        return await idempotency.ExecuteAsync(
+            idempotencyKey,
+            RequestHasher.Hash(request),
+            record => service.CreateAsync(request, record, cancellationToken),
+            service.DescribeAsync,
+            cancellationToken);
+    }
+
+    private static async Task<IResult> GetOrderAsync(Guid id, OrderService service, CancellationToken cancellationToken) =>
+        await service.GetAsync(id, cancellationToken) is { } order
+            ? TypedResults.Ok(order)
+            : Problems.NotFound("order", id);
+
+    private static async Task<IResult> RetryPaymentAsync(
+        Guid id,
+        [FromHeader(Name = "Idempotency-Key"), Description(IdempotencyKeyDescription)] string? idempotencyKey,
+        RetryPaymentRequest request,
+        IValidator<RetryPaymentRequest> validator,
+        IdempotencyExecutor idempotency,
+        OrderService service,
+        CancellationToken cancellationToken)
+    {
+        if (await Problems.ValidateAsync(validator, request, cancellationToken) is { } invalid)
+        {
+            return invalid;
+        }
+
+        if (!await service.ExistsAsync(id, cancellationToken))
+        {
+            return Problems.NotFound("order", id);
+        }
+
+        return await idempotency.ExecuteAsync(
+            idempotencyKey,
+            RequestHasher.Hash(id, request),
+            record => service.PayAgainAsync(id, request, record, cancellationToken),
+            service.DescribeAsync,
+            cancellationToken);
     }
 }
 

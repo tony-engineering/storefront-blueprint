@@ -59,6 +59,9 @@ public sealed class StorefrontApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Database:MigrateOnStartup", "true");
         builder.UseSetting("Database:SeedOnStartup", "true");
 
+        builder.UseSetting("Auth:SigningKey", "integration-tests-signing-key-0123456789abcdef");
+        builder.UseSetting("Auth:DevTokenEndpoint", "true");
+
         builder.UseSetting("Payments:Reconciler:Enabled", "false");
         builder.UseSetting("Payments:Retry:MaxChargeAttempts",
             RetryPolicy.MaxChargeAttempts.ToString(CultureInfo.InvariantCulture));

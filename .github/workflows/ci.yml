@@ -79,10 +79,6 @@ jobs:
     needs: backend-unit
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # TEMPORARY: the integration tests were written before the backend (test-first) and
-    # fail until it is implemented. Failures stay visible in the run but don't turn it red.
-    # Remove this line once the backend makes them pass (ARCHITECTURE.md §13).
-    continue-on-error: true
     defaults:
       run:
         working-directory: backend

@@ -41,6 +41,44 @@ public sealed class StorefrontClient(HttpClient http)
         return await SendAsync<OrderDto>(message, ct);
     }
 
+    /// <summary>POST /api/orders with a hand-written body and a raw header value (or none), to test bad input.</summary>
+    public async Task<ApiResponse<OrderDto>> PlaceOrderJsonAsync(string json, string? idempotencyKey, CancellationToken ct)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Post, "/api/orders")
+        {
+            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+        };
+        if (idempotencyKey is not null)
+        {
+            message.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+        }
+
+        return await SendAsync<OrderDto>(message, ct);
+    }
+
+    public async Task<ApiResponse<TokenDto>> GetTokenAsync(string username, string password, CancellationToken ct) =>
+        await SendAsync<TokenDto>(
+            new HttpRequestMessage(HttpMethod.Post, "/api/auth/token")
+            {
+                Content = JsonContent.Create(new { username, password }, options: Json),
+            },
+            ct);
+
+    /// <summary>Sends this token with every following request.</summary>
+    public void SignIn(string accessToken) =>
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+    public async Task<ApiResponse<ProductDto>> GetProductAsync(Guid id, CancellationToken ct) =>
+        await SendAsync<ProductDto>(new HttpRequestMessage(HttpMethod.Get, $"/api/products/{id}"), ct);
+
+    public async Task<ApiResponse<ProductDto>> CreateProductAsync(CreateProductRequest request, CancellationToken ct) =>
+        await SendAsync<ProductDto>(
+            new HttpRequestMessage(HttpMethod.Post, "/api/admin/products") { Content = JsonContent.Create(request, options: Json) },
+            ct);
+
+    public async Task<ApiResponse<object>> DeleteProductAsync(Guid id, CancellationToken ct) =>
+        await SendAsync<object>(new HttpRequestMessage(HttpMethod.Delete, $"/api/admin/products/{id}"), ct);
+
     private async Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage message, CancellationToken ct)
     {
         using var response = await http.SendAsync(message, ct);
@@ -64,6 +102,16 @@ public sealed record ApiResponse<T>(HttpStatusCode StatusCode, HttpResponseHeade
 
         return this;
     }
+
+    private static readonly JsonSerializerOptions ProblemJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>The error body of a failed response.</summary>
+    public ProblemDto RequiredProblem =>
+        string.IsNullOrWhiteSpace(RawBody)
+            ? throw new InvalidOperationException($"Response had no error body (HTTP {(int)StatusCode}).")
+            : JsonSerializer.Deserialize<ProblemDto>(RawBody, ProblemJson)!;
+
+    public bool WasReplayed => Headers.TryGetValues("Idempotent-Replayed", out var values) && values.Contains("true");
 
     public T RequiredBody => Body ?? throw new InvalidOperationException($"Response had no body. Raw: {RawBody}");
 }
