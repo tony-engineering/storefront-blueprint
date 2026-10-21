@@ -292,7 +292,10 @@ api:
 ### Schema and data
 
 - **EF Core migrations** live in `Persistence/Migrations`. With a single provider they stay simple, and they are the same artifact a persistent deployment would use.
-- On startup (Development / Docker) the API runs `Database.MigrateAsync()`, then an idempotent `DbSeeder` inserts the hardcoded catalog if it is empty. In a multi-instance production deployment, migrations would run as a separate pipeline step instead.
+- On startup the API runs `Database.MigrateAsync()`, then an idempotent `DbSeeder` inserts the hardcoded catalog if it is empty. Both happen before the API accepts requests. They are switched by `Database:MigrateOnStartup` and `Database:SeedOnStartup`: off in `appsettings.json`, on in `appsettings.Development.json` (used by `dotnet run` and Docker Compose) and in the integration tests. In a multi-instance production deployment, migrations would run as a separate pipeline step instead, and there would be no demo data.
+- **Demo catalog** (`Persistence/DbSeeder.cs`): seven tiny houses plus one product that is seeded already soft-deleted, so the catalog visibly hides deleted products. IDs are fixed (`5eed0000-0000-4000-8000-0000000000NN`), so demos and tests can refer to products by ID. Seed products are built through `Product.Create`, the same factory the admin endpoint uses, so seed data cannot bypass validation.
+- **Seeding is idempotent and safe to run concurrently.** It does nothing if any product exists, live or deleted, so restarting the API never duplicates the catalog. The catalog is inserted in one transaction. If two instances seed an empty database at the same time, the slower one hits a primary-key violation on the fixed IDs, rolls back and logs that the catalog was already seeded.
+- Check constraints on `Products` (positive price, ISO 4217 currency) back up the domain rules at the database level.
 - Unique index on `Idempotency.Key`; index on `Order.Status` for the reconciler's query.
 - Connection string comes from `ConnectionStrings:Storefront` (environment variable in Docker, `appsettings.Development.json` pointing at `localhost:5432` for `dotnet run`).
 
@@ -338,7 +341,7 @@ Everything else is left to the integration tests on purpose: payment outcome map
 
 - **Testcontainers** starts one PostgreSQL container per test run, shared through an xUnit collection fixture. It uses the **same image, tmpfs mount and durability flags** as Docker Compose (`WithTmpfsMount("/var/lib/postgresql")`, `WithCommand("-c", "fsync=off", …)`), so tests run on exactly what the app runs on.
 - **WebApplicationFactory** boots the real API in-process with the container's connection string. It replaces `TimeProvider` with a `FakeTimeProvider` and `IPaymentGateway` with a scripted fake whose declines and outages each test sets up. The reconciler loop is switched off; tests call `IPaymentReconciler.RunOnceAsync` while advancing the fake clock, so a two-hour outage runs in seconds and every retry happens at a known moment.
-- **Migrations are applied once** per run. **Respawn** (`DbAdapter.Postgres`, ignoring `__EFMigrationsHistory`) deletes all rows before each test (`IAsyncLifetime`), then `DbSeeder` re-inserts the catalog. Each test starts from a known state without paying for a new container.
+- **Migrations are applied once** per run. **Respawn** (`DbAdapter.Postgres`, ignoring `__EFMigrationsHistory`) deletes all rows before each test (`IAsyncLifetime`), then the test boots a fresh API instance, whose startup `DbSeeder` re-inserts the catalog. Each test starts from a known state without paying for a new container.
 - Tests go through real HTTP with `HttpClient`.
 
 Scenarios:

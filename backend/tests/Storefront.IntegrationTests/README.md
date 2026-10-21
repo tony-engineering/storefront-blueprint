@@ -1,9 +1,6 @@
 # Storefront.IntegrationTests
 
-End-to-end tests of the API over real HTTP, against the same PostgreSQL-on-tmpfs setup the app runs on. They are written **test-first**: they describe the behaviour the backend must have, and they compile against the API skeleton in `backend/src/Storefront.Api`, which declares the contract types below. Until the backend is implemented they fail, in this order:
-
-1. **In the fixture, before any test runs:** Respawn reports `No tables found`, because there is no EF Core migration yet and it needs at least one table to build its delete plan.
-2. **Against the stubs:** every route returns 501, and `IPaymentReconciler` is not registered.
+End-to-end tests of the API over real HTTP, against the same PostgreSQL-on-tmpfs setup the app runs on. They are written **test-first**: they describe the behaviour the backend must have, and they compile against the API skeleton in `backend/src/Storefront.Api`, which declares the contract types below. Until the backend is implemented they fail against the stubs: the database, its migration and the seeded catalog (`GET /api/products`) are in place, but the order routes still return 501 and `IPaymentReconciler` is not registered.
 
 ## Running
 

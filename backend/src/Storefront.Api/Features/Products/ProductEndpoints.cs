@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using Microsoft.EntityFrameworkCore;
+using Storefront.Api.Persistence;
 
 namespace Storefront.Api.Features.Products;
 
@@ -6,8 +8,7 @@ public static class ProductEndpoints
 {
     public static IEndpointRouteBuilder MapProductEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/products", () =>
-                NotImplementedYet.Problem("Listing products"))
+        app.MapGet("/api/products", ListProductsAsync)
             .WithTags("Products")
             .WithName("ListProducts")
             .WithSummary("List products")
@@ -32,9 +33,28 @@ public static class ProductEndpoints
 
         return app;
     }
+
+    /// <summary>The public catalog: live products only, ordered by name.</summary>
+    private static async Task<IResult> ListProductsAsync(StorefrontDbContext db, CancellationToken cancellationToken)
+    {
+        var products = await db.Products
+            .AsNoTracking()
+            .Where(p => !p.IsDeleted)
+            .OrderBy(p => p.Name)
+            .Select(p => new ProductDto(
+                p.Id,
+                p.Name,
+                p.Description,
+                new MoneyDto(p.Price.AmountMinor, p.Price.Currency)))
+            .ToListAsync(cancellationToken);
+
+        return TypedResults.Ok(products);
+    }
 }
 
 public sealed record CreateProductRequest(
     [property: Description("Display name. Required.")] string Name,
     [property: Description("Optional longer description.")] string? Description,
     [property: Description("Price in minor units (pence), e.g. 1999 for £19.99. Must be positive."), DefaultValue(1999L)] long PriceMinor);
+
+public sealed record ProductDto(Guid Id, string Name, string? Description, MoneyDto Price);
