@@ -164,8 +164,8 @@ jobs:
           cache-from: type=gha,scope=storefront-web
           cache-to: type=gha,scope=storefront-web,mode=max
 
-  frontend:
-    name: frontend
+  frontend-unit-lint:
+    name: frontend-unit-lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
