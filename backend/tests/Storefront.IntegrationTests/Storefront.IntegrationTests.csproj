@@ -15,6 +15,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- Used directly by PostgresFixture (Respawn connection); nothing else brings it in yet. -->
+    <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="Respawn" Version="6.2.1" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />

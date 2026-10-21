@@ -1,14 +1,24 @@
 # Storefront.IntegrationTests
 
-End-to-end tests of the API over real HTTP, against the same PostgreSQL-on-tmpfs setup the app runs on. They are written **test-first**: they describe the behaviour the backend must have and will not compile until `backend/src/Storefront.Api` exists and meets the contract below.
+End-to-end tests of the API over real HTTP, against the same PostgreSQL-on-tmpfs setup the app runs on. They are written **test-first**: they describe the behaviour the backend must have, and they compile against the API skeleton in `backend/src/Storefront.Api`, which declares the contract types below. Until the backend is implemented they fail, in this order:
+
+1. **In the fixture, before any test runs:** Respawn reports `No tables found`, because there is no EF Core migration yet and it needs at least one table to build its delete plan.
+2. **Against the stubs:** every route returns 501, and `IPaymentReconciler` is not registered.
 
 ## Running
 
+Only Docker is needed; the .NET SDK runs in a container. From the repo root:
+
 ```bash
-dotnet test backend/tests/Storefront.IntegrationTests
+docker compose run --rm integration-tests      # compile and run the tests
+docker compose run --rm integration-tests --filter "FullyQualifiedName~Happy_path"   # extra args go to dotnet test
 ```
 
-Docker must be running (Testcontainers starts `postgres:18-alpine`). Time is simulated, so the outage scenarios finish in seconds.
+The test container gets the host's Docker socket, so Testcontainers starts `postgres:18-alpine` as a sibling container and reaches it through `host.docker.internal`. Results are written to `backend/TestResults/integration-tests.trx`; build output and the NuGet cache stay in named volumes (`docker compose down -v` clears them). With Colima or another non-default socket, set `DOCKER_SOCKET` to its path first.
+
+With the .NET 10 SDK installed locally, `dotnet test backend/tests/Storefront.IntegrationTests` works too (Docker must still be running).
+
+Time is simulated, so the outage scenarios finish in seconds.
 
 ## Payment scenarios — `Payments/CheckoutPaymentTests.cs`
 

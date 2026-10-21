@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Storefront.Api/Storefront.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Storefront.IntegrationTests/Storefront.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

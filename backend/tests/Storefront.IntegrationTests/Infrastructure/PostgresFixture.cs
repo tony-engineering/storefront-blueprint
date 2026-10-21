@@ -7,14 +7,14 @@ using Xunit;
 namespace Storefront.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// One PostgreSQL container per test run, configured exactly like the <c>postgres</c>
+/// One PostgreSQL container per test run, configured exactly like the <c>db</c>
 /// service in docker-compose.yml: same image, data directory on tmpfs, durability off.
 /// Each test starts from an empty database (Respawn); the API re-seeds the catalog on start-up.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:18-alpine")
+    // Keep the image tag in step with the db service in docker-compose.yml.
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18-alpine")
         .WithDatabase("storefront")
         .WithUsername("storefront")
         .WithPassword("storefront")

@@ -35,7 +35,7 @@ flowchart LR
     Ef -- Npgsql --> Pg[("PostgreSQL 18<br/>data dir on tmpfs (RAM)")]
 ```
 
-Three containers locally (`web`, `api`, `postgres`). No message broker, no separate payment service.
+Three containers locally (`web`, `api`, `db`). No message broker, no separate payment service.
 
 **One database engine everywhere.** The app, the integration tests and CI all run PostgreSQL with its data directory on a `tmpfs` (RAM) mount. That gives the in-memory behaviour the brief allows (fast, reset on restart) while running on the same engine the system would use with real money.
 
@@ -241,7 +241,7 @@ A `BackgroundService` that every few seconds calls `IPaymentReconciler.RunOnceAs
 
 Keeping the pass in `RunOnceAsync`, separate from the loop, lets the integration tests drive it step by step against a fake clock.
 
-**On queues:** the orders table *is* the durable work queue here. A broker (RabbitMQ, Azure Service Bus) would replace the polling loop once there are multiple instances, real money, or other consumers of payment events. Because the database lives in RAM, unresolved orders are lost if the `postgres` container restarts (an API restart alone loses nothing). That is acceptable for this exercise and listed as a trade-off.
+**On queues:** the orders table *is* the durable work queue here. A broker (RabbitMQ, Azure Service Bus) would replace the polling loop once there are multiple instances, real money, or other consumers of payment events. Because the database lives in RAM, unresolved orders are lost if the `db` container restarts (an API restart alone loses nothing). That is acceptable for this exercise and listed as a trade-off.
 
 ### Mock payment gateway
 
@@ -266,7 +266,7 @@ The ORM is unaware of the tmpfs: EF Core talks to an ordinary PostgreSQL server 
 
 ```yaml
 # docker-compose.yml (excerpt)
-postgres:
+db:
   image: postgres:18-alpine          # pin the exact minor tag when scaffolding
   environment:
     POSTGRES_DB: storefront
@@ -282,7 +282,7 @@ postgres:
     retries: 15
 api:
   depends_on:
-    postgres: { condition: service_healthy }
+    db: { condition: service_healthy }
 ```
 
 - **Mount point:** from PostgreSQL 18 the official image keeps data under a version-specific directory below `/var/lib/postgresql` instead of `/var/lib/postgresql/data`. Mounting the tmpfs at `/var/lib/postgresql` covers both layouts; mounting at the old path would silently leave data on the container's disk.
@@ -442,12 +442,20 @@ nginx in the `web` container proxies `/api` to the `api` container, so the brows
 **Developing outside containers:**
 
 ```bash
-docker compose up -d postgres                       # database only, exposed on localhost:5432
+docker compose up -d db                             # database only, exposed on localhost:5432
 dotnet run --project backend/src/Storefront.Api     # applies migrations, seeds catalog
 cd frontend && npm start                            # dev proxy forwards /api
 ```
 
-`docker compose restart postgres` (or `down`/`up`) resets the database to the seed data. Docker is required for both running the app and running the integration tests.
+`docker compose restart db` (or `down`/`up`) resets the database to the seed data. Docker is required for both running the app and running the integration tests.
+
+**Running the integration tests without a local .NET SDK:**
+
+```bash
+docker compose run --rm integration-tests      # .NET 10 SDK image; Testcontainers via the host's Docker socket
+```
+
+The `integration-tests` service sits under a `tests` Compose profile, so `docker compose up` (which starts `db` and `api`) never runs it. Build output and the NuGet cache live in named volumes, so Linux `bin/obj` never collide with an IDE's on the host.
 
 ## 15. Assumptions
 

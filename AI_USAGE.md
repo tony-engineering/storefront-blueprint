@@ -43,3 +43,26 @@ I gave the AI five checkout scenarios to cover with integration tests: paid firs
 - **Follow-on changes:** `ARCHITECTURE.md` updated (payment attempts, new states, retry policy, new endpoint); the UI kit's status map got the two new statuses and their customer messages. The contract the backend must meet is in the test project's `README.md`.
 - **Limitation:** no .NET SDK or NuGet access was available in the AI's environment, so the tests were reviewed but not compiled. Package versions were checked on nuget.org; Respawn and xUnit are pinned to the last versions whose API the AI knew, not the newest majors.
 - **Open point:** still no circuit breaker; during a long outage every new order makes its own six calls to the provider.
+
+### Docker Compose and API skeleton
+
+I asked for a Docker Compose setup to compile and run the integration tests without installing .NET on my machine.
+
+- **First attempt, corrected:** the AI added separate `build` and `integration-tests` tool services. I didn't want a `build` service, and asked for exactly three services instead: `db` and `api`, started by `docker compose up`, and `integration-tests`, which runs only when asked (`docker compose run --rm integration-tests`, under a `tests` profile).
+- **API skeleton:** I asked for the API project with its routes but no logic yet. Every route in the architecture returns **501 Not Implemented** as ProblemDetails; `/health` returns 200. The project also declares the payment contracts the tests depend on (`IPaymentGateway`, `IPaymentReconciler` and their records) and `public partial class Program`, so the test project can compile. The API image is a multi-stage Dockerfile (SDK to build, ASP.NET runtime to run, non-root user).
+- **Testcontainers inside a container:** the test container gets the host's Docker socket, so Testcontainers starts its own PostgreSQL as a sibling container and connects through `host.docker.internal`. The `PostgresFixture` did not need to change for this.
+- **Keeping the host clean:** build output goes to a named volume (`--artifacts-path`), so Linux `bin/obj` never clash with my IDE's; NuGet packages are cached in another volume. Only the TRX results land in the repo (`backend/TestResults/`, git-ignored).
+- **Limitation:** the AI could not pull images or reach NuGet from its environment, so it only validated the Compose file; nothing was compiled or run. Resolved in the next entry.
+
+### First build and test run
+
+I asked the AI to build and run the stack and the integration tests for the first time, fixing only compile, restore or Testcontainers wiring problems, and no business logic.
+
+- **Network first:** I allowed `mcr.microsoft.com`, `registry-1.docker.io` and `api.nuget.org`. The AI checked they were reachable before doing anything else; the first time they weren't yet, so it stopped and told me.
+- **Where it ran:** in the AI's cloud workspace, because the shell it can use on my Mac has no Docker. It copied the repo there and wrote the fixes back to my folder; I review and commit myself.
+- **App:** `docker compose build` passed first time. `/health` returned 200 and `/api/products` 501 ProblemDetails; PostgreSQL ran on tmpfs with durability off, and the API as a non-root user.
+- **Fixes:** the test project did not compile, because `PostgresFixture` uses `Npgsql` directly and nothing referenced it. The AI added `Npgsql` 10.0.3, the same line as the EF Core provider the API will use. It also replaced the obsolete `new PostgreSqlBuilder()` with `new PostgreSqlBuilder("postgres:18-alpine")`. Nothing else in the code changed.
+- **Workspace-only workarounds, not in the repo:** a public mirror (`mirror.gcr.io`) for `postgres:18-alpine` when Docker Hub rate-limited the cloud IP, and a Compose override kept outside the repo so the test container could use the sandbox's HTTPS proxy. Neither affects running it on my machine.
+- **Results:** the tests compile with no C# warnings, and the Testcontainers wiring works. All 5 tests fail, earlier than I expected: Respawn finds no tables, because there is no migration yet. After the first migration they will fail on the 501 stubs and the missing `IPaymentReconciler`. The test README now says so.
+- **A side question:** I asked why `curl http://[::1]:8080/` returned 404. It is expected: nothing is mapped at `/`, and a 404 shows the request did reach the API. The AI started restarting Docker to reproduce it; I stopped it, since reading the routes was enough.
+- **Open point:** Respawn 6.2.1 brings in an old `Microsoft.Data.SqlClient` with vulnerable dependencies (`System.Drawing.Common` 5.0.0, `Azure.Identity` 1.3.0 and others). They are test-only and never ship, but I should decide whether to move to a newer Respawn.

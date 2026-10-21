@@ -1,0 +1,71 @@
+name: storefront
+
+services:
+  # PostgreSQL with its data directory in RAM (ARCHITECTURE.md §8).
+  # Keep the image tag in step with PostgresFixture.cs.
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: storefront
+      POSTGRES_USER: storefront
+      POSTGRES_PASSWORD: storefront    # local only
+    command: >
+      postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    tmpfs:
+      - /var/lib/postgresql:size=512m  # PG 18 keeps data below /var/lib/postgresql/<major>/
+    ports:
+      - "127.0.0.1:5432:5432"          # loopback only, to inspect the database from the host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storefront -d storefront"]
+      interval: 2s
+      retries: 15
+
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Storefront: Host=db;Port=5432;Database=storefront;Username=storefront;Password=storefront
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Only runs when asked: docker compose run --rm integration-tests [extra dotnet test args]
+  #
+  # Uses the .NET SDK image against the mounted repo, so nothing .NET is installed on the host.
+  # Testcontainers starts its own throwaway PostgreSQL through the host's Docker socket and
+  # reaches it via host.docker.internal; it does not use the db service above.
+  integration-tests:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    profiles: ["tests"]
+    working_dir: /repo
+    volumes:
+      - .:/repo
+      - nuget-packages:/root/.nuget/packages
+      - dotnet-artifacts:/artifacts          # bin/obj stay out of the host's source tree
+      # Colima / Rancher users: DOCKER_SOCKET=$HOME/.colima/default/docker.sock (or your socket path)
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Docker Desktop provides it already; needed on Linux
+    entrypoint:
+      - dotnet
+      - test
+      - backend/tests/Storefront.IntegrationTests
+      - --artifacts-path
+      - /artifacts
+      - --logger
+      - console;verbosity=normal
+      - --logger
+      - trx;LogFileName=integration-tests.trx
+      - --results-directory
+      - backend/TestResults
+
+volumes:
+  nuget-packages:
+  dotnet-artifacts:
