@@ -14,9 +14,9 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+# No `concurrency` block on purpose: every push gets its own complete run, and runs never
+# cancel each other. With work pushed straight to main, each commit then has a result of its own
+# (ARCHITECTURE.md §13), at the cost of some extra runner minutes.
 
 permissions:
   contents: read

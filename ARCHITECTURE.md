@@ -383,10 +383,9 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 ```
+
+There is deliberately **no `concurrency` block**: every push gets its own complete run, and a newer run never cancels an older one. Work goes straight to `main`, so each commit should end with its own pass or fail instead of the earlier one showing as `cancelled`. Runs triggered by quick successive pushes simply execute side by side. The cost is extra runner minutes. The manual load test is the opposite: it queues (`cancel-in-progress: false`), because two load tests at once would skew each other's numbers.
 
 Four independent chains start together. The only ordering is inside the backend test chain: integration tests wait for unit tests.
 
