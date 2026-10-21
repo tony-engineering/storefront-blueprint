@@ -31,6 +31,15 @@ services:
       db:
         condition: service_healthy
 
+  # Angular storefront: built in a Node stage, served by nginx (frontend/Dockerfile).
+  # nginx forwards /api to the api service, so the browser sees one origin and needs no CORS.
+  web:
+    build: ./frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - api                            # so `docker compose up web` starts the whole stack
+
   # Only runs when asked: docker compose run --rm integration-tests [extra dotnet test args]
   #
   # Uses the .NET SDK image against the mounted repo, so nothing .NET is installed on the host.

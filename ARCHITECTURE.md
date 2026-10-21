@@ -428,7 +428,8 @@ Tests run **after** code reaches `main`, so a broken commit can land. Acceptable
 ## 14. Running locally
 
 ```bash
-docker compose up --build
+docker compose up --build              # db, api and web
+docker compose up --build web          # same: web pulls in api, which waits for db
 ```
 
 | URL | What |
@@ -437,7 +438,7 @@ docker compose up --build
 | http://localhost:8080/swagger | API docs and manual calls |
 | http://localhost:8080/health | Health check |
 
-nginx in the `web` container proxies `/api` to the `api` container, so the browser sees one origin and CORS is not needed. PostgreSQL is not exposed outside the Compose network by default.
+nginx in the `web` container proxies `/api` to the `api` container, so the browser sees one origin and CORS is not needed. It re-resolves `api` through Docker's DNS, so rebuilding or restarting the API (`docker compose up -d --build api`) does not require restarting `web`. PostgreSQL is published on `127.0.0.1:5432` only, to inspect the database from the host.
 
 **Developing outside containers:**
 

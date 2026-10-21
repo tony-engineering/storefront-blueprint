@@ -55,8 +55,10 @@ Empty folders hold a `.gitkeep` until their first file lands.
 
 ## Docker
 
+From the repo root, the `web` service in `docker-compose.yml` builds this folder and starts it with the API and database:
+
 ```bash
-docker build -t storefront-web .
+docker compose up --build web      # http://localhost:4200; also starts api and db
 ```
 
-The image serves the production build on port 80. `/api` is proxied to `http://api:8080`, so the container expects to share a network with the API (wired up in Docker Compose later).
+The image serves the production build on port 80, published as 4200. `/api` is proxied to `http://api:8080` on the Compose network. nginx re-resolves `api` through Docker's DNS, so rebuilding the API does not need a `web` restart. To build the image on its own: `docker build -t storefront-web .`
