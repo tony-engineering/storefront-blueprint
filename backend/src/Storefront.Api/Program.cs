@@ -1,17 +1,27 @@
+using System.Text.Json.Serialization;
 using Storefront.Api.Features.Orders;
 using Storefront.Api.Features.Products;
+using Storefront.Api.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
+builder.Services.AddApiDocs();
+
+// Numbers must be JSON numbers: "1999" is rejected for a price. ASP.NET's web defaults accept
+// numeric strings, which would also make the OpenAPI schema (and the generated Angular client)
+// type every number as `number | string`.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-app.MapHealthChecks("/health");
+app.MapApiDocs();
+app.MapHealthChecks("/health").ExcludeFromDescription();
 app.MapProductEndpoints();
 app.MapOrderEndpoints();
 

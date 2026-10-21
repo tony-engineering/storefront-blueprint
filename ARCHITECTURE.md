@@ -301,6 +301,8 @@ api:
 - JWT bearer authentication with a `role` claim; `Admin` policy on `/api/admin/*`.
 - 401 without a token, 403 with a non-admin token.
 - The token endpoint and its hardcoded users exist only in the Development environment.
+- API docs (`/openapi/v1.json` and Swagger UI at `/swagger`) are public in every environment, so anyone can read the contract and send requests from the browser without logging in. Admin operations still need a bearer token, entered with **Authorize**. Set `ApiDocs:Enabled=false` to hide the docs on a public deployment.
+- JSON numbers must be real numbers (`NumberHandling.Strict`): a price sent as `"1999"` is a 400, and the OpenAPI schema types numbers as `integer` only, which keeps the generated Angular client's types exact.
 - Signing key comes from configuration (user secrets / environment variable), never committed.
 - Input validation on every write endpoint: non-empty names, positive prices, quantities 1–100, at most 50 lines, no duplicate product IDs.
 
@@ -443,6 +445,7 @@ docker compose up --build web          # same: web pulls in api, which waits for
 |---|---|
 | http://localhost:4200 | Storefront |
 | http://localhost:8080/swagger | API docs and manual calls |
+| http://localhost:8080/openapi/v1.json | OpenAPI document (source for the Angular client) |
 | http://localhost:8080/health | Health check |
 
 nginx in the `web` container proxies `/api` to the `api` container, so the browser sees one origin and CORS is not needed. It re-resolves `api` through Docker's DNS, so rebuilding or restarting the API (`docker compose up -d --build api`) does not require restarting `web`. PostgreSQL is published on `127.0.0.1:5432` only, to inspect the database from the host.
