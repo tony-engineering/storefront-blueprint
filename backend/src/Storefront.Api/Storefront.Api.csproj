@@ -10,7 +10,6 @@
   <ItemGroup>
     <!-- Generates the OpenAPI document at /openapi/v1.json (ARCHITECTURE.md §2). -->
     <PackageReference Include="FluentValidation" Version="12.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
     <!-- UI only: renders that document at /swagger. Swashbuckle's own generator is not used. -->
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.3.1" />

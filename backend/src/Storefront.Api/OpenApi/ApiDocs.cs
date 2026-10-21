@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
@@ -7,21 +7,41 @@ namespace Storefront.Api.OpenApi;
 /// <summary>
 /// OpenAPI document (<c>/openapi/v1.json</c>) and Swagger UI (<c>/swagger</c>).
 /// Both are public: no login is needed to read the docs or send requests from them.
-/// Admin endpoints still check the bearer token sent with each request.
 /// </summary>
 public static class ApiDocs
 {
     public const string DocumentName = "v1";
     public const string DocumentPath = $"/openapi/{DocumentName}.json";
     public const string UiPath = "swagger";
-    public const string BearerSchemeId = "Bearer";
+
+    /// <summary>
+    /// Pre-filled into every <c>Idempotency-Key</c> field in Swagger UI. A valid, non-empty UUID, so the field is never
+    /// blank. The UI swaps it for a fresh UUID on each send (see <see cref="SwapPlaceholdersScript"/>), so
+    /// clicking Execute twice is two separate attempts. Type any other value to test a replay.
+    /// </summary>
+    public const string IdempotencyKeyPlaceholder = "00000000-0000-4000-8000-000000000000";
+
+    /// <summary>Seeded product ("Burrow") pre-filled into every product <c>{id}</c> field.</summary>
+    public const string ProductIdExample = "5eed0000-0000-4000-8000-000000000007";
+
+    /// <summary>Seeded paid order ("DbSeeder.DemoOrderId") pre-filled into every order <c>{id}</c> field.</summary>
+    public const string OrderIdExample = "0de20000-0000-4000-8000-000000000001";
+
+    private const string SwapPlaceholdersScript = $$"""
+        (req) => {
+          if (req.headers && req.headers['Idempotency-Key'] === '{{IdempotencyKeyPlaceholder}}') {
+            req.headers['Idempotency-Key'] = crypto.randomUUID();
+          }
+          return req;
+        }
+        """;
 
     public static IServiceCollection AddApiDocs(this IServiceCollection services)
     {
         services.AddOpenApi(DocumentName, options =>
         {
             options.AddDocumentTransformer(DescribeDocument);
-            options.AddOperationTransformer(MarkSecuredOperations);
+            options.AddOperationTransformer(PrefillExamples);
         });
 
         return services;
@@ -38,8 +58,7 @@ public static class ApiDocs
             return app;
         }
 
-        // AllowAnonymous keeps the docs public once a fallback authorization policy is added.
-        app.MapOpenApi("/openapi/{documentName}.json").AllowAnonymous();
+        app.MapOpenApi("/openapi/{documentName}.json");
 
         app.UseSwaggerUI(ui =>
         {
@@ -48,7 +67,7 @@ public static class ApiDocs
             ui.DocumentTitle = "Storefront API";
             ui.EnableTryItOutByDefault();      // every operation is ready to send, no extra click
             ui.DisplayRequestDuration();
-            ui.EnablePersistAuthorization();   // keeps a pasted admin token across page reloads
+            ui.UseRequestInterceptor(SwapPlaceholdersScript);   // fresh Idempotency-Key per send
         });
 
         app.MapGet("/", () => Results.Redirect($"/{UiPath}")).ExcludeFromDescription();
@@ -84,47 +103,40 @@ public static class ApiDocs
                 | `tok_flaky` | Status unavailable for two reconciler checks, then `Paid` |
 
                 **Errors** are ProblemDetails (RFC 9457).
-
-                **Admin endpoints** need a bearer token: click **Authorize** and paste it.
                 """,
-        };
-
-        document.Components ??= new OpenApiComponents();
-        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
-        document.Components.SecuritySchemes[BearerSchemeId] = new OpenApiSecurityScheme
-        {
-            Type = SecuritySchemeType.Http,
-            Scheme = "bearer",
-            BearerFormat = "JWT",
-            Description = "JWT for the admin endpoints. Paste the token only, without the \"Bearer \" prefix.",
         };
 
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Adds the bearer requirement (padlock icon in Swagger UI) and the 401/403 responses to every
-    /// endpoint that requires authorization, so docs follow <c>RequireAuthorization</c> automatically.
+    /// Gives header and path parameters an example, which Swagger UI pre-fills: the Idempotency-Key placeholder, the
+    /// seeded product for <c>/api/products/{id}</c>, and the seeded order for <c>/api/orders/{id}</c>.
     /// </summary>
-    private static Task MarkSecuredOperations(
+    private static Task PrefillExamples(
         OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
     {
-        var metadata = context.Description.ActionDescriptor.EndpointMetadata;
-        var requiresAuth = metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any();
-        if (!requiresAuth)
+        var path = context.Description.RelativePath ?? string.Empty;
+
+        foreach (var parameter in operation.Parameters?.OfType<OpenApiParameter>() ?? [])
         {
-            return Task.CompletedTask;
+            if (parameter.In == ParameterLocation.Header
+                && string.Equals(parameter.Name, "Idempotency-Key", StringComparison.OrdinalIgnoreCase))
+            {
+                parameter.Example = JsonValue.Create(IdempotencyKeyPlaceholder);
+            }
+            else if (parameter.In == ParameterLocation.Path && string.Equals(parameter.Name, "id", StringComparison.OrdinalIgnoreCase))
+            {
+                if (path.StartsWith("api/products", StringComparison.OrdinalIgnoreCase))
+                {
+                    parameter.Example = JsonValue.Create(ProductIdExample);
+                }
+                else if (path.StartsWith("api/orders", StringComparison.OrdinalIgnoreCase))
+                {
+                    parameter.Example = JsonValue.Create(OrderIdExample);
+                }
+            }
         }
-
-        operation.Security ??= [];
-        operation.Security.Add(new OpenApiSecurityRequirement
-        {
-            [new OpenApiSecuritySchemeReference(BearerSchemeId, context.Document)] = [],
-        });
-
-        operation.Responses ??= new OpenApiResponses();
-        operation.Responses.TryAdd("401", new OpenApiResponse { Description = "Missing or invalid bearer token." });
-        operation.Responses.TryAdd("403", new OpenApiResponse { Description = "Token is valid but lacks the Admin role." });
 
         return Task.CompletedTask;
     }

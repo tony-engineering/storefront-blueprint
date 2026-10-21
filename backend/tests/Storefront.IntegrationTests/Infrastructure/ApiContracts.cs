@@ -29,7 +29,6 @@ public sealed record OrderDto(
 
 public sealed record CreateProductRequest(string Name, string? Description, long PriceMinor);
 
-public sealed record TokenDto(string AccessToken, string TokenType, int ExpiresIn);
 
 /// <summary>An RFC 9457 error body. <c>Errors</c> is present on validation failures.</summary>
 public sealed record ProblemDto(

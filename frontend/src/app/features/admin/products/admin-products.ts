@@ -16,7 +16,7 @@ import { MoneyPipe } from '../../../shared/pipes/money.pipe';
 
 const PRICE_PATTERN = /^\s*\d{1,9}(\.\d{1,2})?\s*$/;
 
-/** Create and delete products. Not guarded yet: the API has no auth endpoint (ARCHITECTURE.md §9). */
+/** Create and delete products. Open by design: the API has no auth (ARCHITECTURE.md §9). */
 @Component({
   selector: 'app-admin-products',
   imports: [ReactiveFormsModule, MoneyPipe],

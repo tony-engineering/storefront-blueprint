@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
-// One lazy-loaded route per feature folder. No auth guard on admin yet:
-// the API has no token endpoint, so the admin page stays open until it does.
+// One lazy-loaded route per feature folder. No auth guard on admin:
+// the API has no authentication by design.
 export const routes: Routes = [
   {
     path: '',

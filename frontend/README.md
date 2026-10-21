@@ -55,7 +55,7 @@ frontend/
 
 ## Known gaps
 
-- The admin page has no sign-in. The API has no token endpoint yet (ARCHITECTURE.md §9), so a guard and the JWT interceptor are left out until it has.
+- The admin page has no sign-in, and neither does the API (ARCHITECTURE.md §9).
 - API types are written by hand; there is no client code generator (ARCHITECTURE.md §11).
 
 ## Docker

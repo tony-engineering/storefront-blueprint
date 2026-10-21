@@ -37,7 +37,7 @@ Colima / Rancher users: set `DOCKER_SOCKET` to your socket path, e.g. `DOCKER_SO
 
 ## Architecture decisions
 
-The backend is a single .NET 10 Minimal API organised by feature (products, orders, auth), using EF Core on PostgreSQL 18 with its data directory on tmpfs. That gives in-memory behaviour (fast, reset on restart) on the same engine used in tests and CI. The Angular client (standalone components, signals) is served by nginx, which proxies `/api` to the API so the browser sees one origin.
+The backend is a single .NET 10 Minimal API organised by feature (products, orders), using EF Core on PostgreSQL 18 with its data directory on tmpfs. That gives in-memory behaviour (fast, reset on restart) on the same engine used in tests and CI. The Angular client (standalone components, signals) is served by nginx, which proxies `/api` to the API so the browser sees one origin.
 
 Resilience is built around the two hard requirements in the brief:
 

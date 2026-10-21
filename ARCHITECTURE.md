@@ -47,10 +47,10 @@ Three containers locally (`web`, `api`, `db`). No message broker, no separate pa
 | Persistence | EF Core 10 + `Npgsql.EntityFrameworkCore.PostgreSQL` | Official PostgreSQL provider; migrations, unique-constraint errors and row versioning all supported. |
 | Database | PostgreSQL 18, data directory on **tmpfs**, durability off | In-memory in practice (RAM, reset on restart) as the brief allows, but with real transactions, constraints and concurrent writers. See §8. |
 | Test database | Same image via **Testcontainers**, reset with **Respawn** | Tests run on exactly what the app runs on; the concurrency tests exercise real parallel transactions. |
-| API docs | `Microsoft.AspNetCore.OpenApi` + Swagger UI at `/swagger` | Call every endpoint manually, including admin ones via the bearer token. |
+| API docs | `Microsoft.AspNetCore.OpenApi` + Swagger UI at `/swagger` | Call every endpoint manually, including the admin ones. |
 | Validation | FluentValidation | Rules live next to the request types and are unit-testable. |
 | Errors | ProblemDetails (RFC 9457) | One consistent, machine-readable error shape. |
-| Auth | JWT bearer, `Admin` policy | Lightweight; replaceable with a real identity provider without touching endpoints. |
+| Auth | None | Deliberate: the data is in-memory and a restart resets everything. Admin routes live under `/api/admin/*`, so an authorization policy can be added to that one route group later. |
 | Frontend | Angular (standalone components, signals) | Required by the brief. |
 | CI | GitHub Actions | Runs unit + integration tests on every push to `main`; load test on demand. |
 
@@ -62,8 +62,7 @@ Three containers locally (`web`, `api`, `db`). No message broker, no separate pa
 │   ├── src/Storefront.Api/
 │   │   ├── Features/
 │   │   │   ├── Products/        # list, create, delete (+ validators)
-│   │   │   ├── Orders/          # create, get, OrderService, state machine
-│   │   │   └── Auth/            # dev-only token endpoint
+│   │   │   └── Orders/          # create, get, OrderService, state machine
 │   │   ├── Payments/            # IPaymentGateway, MockPaymentGateway, PaymentReconciler
 │   │   ├── Idempotency/         # filter, record entity, request hashing
 │   │   ├── Persistence/         # DbContext, entity configs, seeder, Migrations/
@@ -143,9 +142,8 @@ Transitions live in the `Order` entity (`MarkPaid()`, `MarkFailed(reason)`, …)
 | POST | `/api/orders` | public | 201 / 202 | Requires `Idempotency-Key` header |
 | GET | `/api/orders/{id}` | public | 200 | 404 if unknown |
 | POST | `/api/orders/{id}/payments` | public | 201 / 202 | New payment attempt (e.g. another card). Requires `Idempotency-Key`. Only from `PaymentFailed` or `PaymentUnavailable`; otherwise **409** |
-| POST | `/api/admin/products` | Admin | 201 + `Location` | Validated |
-| DELETE | `/api/admin/products/{id}` | Admin | 204 | Soft delete; idempotent (deleting twice is still 204); 404 if the ID never existed |
-| POST | `/api/auth/token` | public, **Development only** | 200 | Hardcoded `admin` / `customer` users |
+| POST | `/api/admin/products` | public (no auth) | 201 + `Location` | Validated |
+| DELETE | `/api/admin/products/{id}` | public (no auth) | 204 | Soft delete; idempotent (deleting twice is still 204); 404 if the ID never existed |
 
 Order IDs are GUIDs, so they cannot be enumerated. In production, order retrieval would be scoped to the authenticated customer.
 
@@ -302,12 +300,9 @@ api:
 
 ## 9. Security
 
-- JWT bearer authentication with a `role` claim; `Admin` policy on `/api/admin/*`.
-- 401 without a token, 403 with a non-admin token.
-- The token endpoint and its hardcoded users exist only in the Development environment.
-- API docs (`/openapi/v1.json` and Swagger UI at `/swagger`) are public in every environment, so anyone can read the contract and send requests from the browser without logging in. Admin operations still need a bearer token, entered with **Authorize**. Set `ApiDocs:Enabled=false` to hide the docs on a public deployment.
+- **No authentication or authorization**, by choice: the demo data is disposable (restart to reset). Before real money or real data, put a policy on the `/api/admin/*` group in `ProductEndpoints`.
+- API docs (`/openapi/v1.json` and Swagger UI at `/swagger`) are public in every environment, so anyone can read the contract and send requests from the browser without logging in. Set `ApiDocs:Enabled=false` to hide the docs on a public deployment.
 - JSON numbers must be real numbers (`NumberHandling.Strict`): a price sent as `"1999"` is a 400, and the OpenAPI schema types numbers as `integer` only, which keeps the documented types exact for anyone reading the spec.
-- Signing key comes from configuration (user secrets / environment variable), never committed.
 - Input validation on every write endpoint: non-empty names, positive prices, quantities 1–100, at most 50 lines, no duplicate product IDs.
 
 ## 10. Error handling
@@ -318,7 +313,7 @@ api:
 
 ## 11. Frontend
 
-- **Pages:** product list, cart, checkout, order details / lookup, admin products. The admin route is not guarded yet because the API has no token endpoint; the guard and the JWT interceptor are added together with it.
+- **Pages:** product list, cart, checkout, order details / lookup, admin products. The admin route is open: the API has no authentication.
 - **Cart** is a signals-based service, persisted to `localStorage`.
 - **Checkout** creates the idempotency key when the page opens and reuses it for retries. It disables the submit button while a request is in flight, shows each outcome distinctly, and polls `GET /api/orders/{id}` while the status is `PaymentUnknown`.
 - ProblemDetails errors are mapped to user-facing messages by one helper (`core/http/problem.ts`); an HTTP interceptor that attaches the JWT comes with auth.
@@ -474,7 +469,7 @@ The `integration-tests` service sits under a `tests` Compose profile, so `docker
 - Single currency (GBP); no tax or shipping.
 - No stock tracking; products are always available unless deleted.
 - Anonymous checkout; orders are retrievable by ID.
-- Authentication is mocked with hardcoded users for the exercise.
+- There is no authentication: the admin routes are open, because the data resets on restart.
 - A declined payment leaves the order `PaymentFailed`. The customer can pay the same order again with another card (a new payment attempt with a new key). Declines are never retried automatically.
 - "Provider unavailable" (connection refused, 503) means nothing was charged; a timeout does not.
 - Data is intentionally ephemeral: restarting the database container resets the store to its seed catalog.
@@ -487,7 +482,7 @@ The `integration-tests` service sits under a `tests` Compose profile, so `docker
 | Migrations applied at app startup | Unsafe with many instances starting at once | Run migrations as a pipeline step |
 | Background retries only for "unavailable", fixed retry limit | Customer gets an answer in about a minute but must retry themselves after a long outage; every order keeps hitting a provider that is down | Circuit breaker that fails fast while the provider is down; notify the customer when it recovers |
 | Polling reconciler | Single instance, simple | Message broker + outbox for payment events |
-| Mock auth | Not secure | External identity provider (OIDC) |
+| No auth | Admin routes are open | Identity provider (OIDC) + policy on `/api/admin/*` |
 | Mock gateway | No real provider semantics (webhooks, 3DS) | Real provider integration via `IPaymentGateway`, webhook endpoint |
 | Single API project | Less enforced layering | Split projects if domain grows |
 | Push to `main` | Broken commits can land | PRs + branch protection |

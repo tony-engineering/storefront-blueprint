@@ -2,7 +2,6 @@ using System.ComponentModel;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Storefront.Api.Common;
-using Storefront.Api.Features.Auth;
 using Storefront.Api.Persistence;
 
 namespace Storefront.Api.Features.Products;
@@ -32,13 +31,12 @@ public static class ProductEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         var admin = app.MapGroup("/api/admin/products")
-            .WithTags("Admin: products")
-            .RequireAuthorization(AuthPolicies.Admin);
+            .WithTags("Admin: products");
 
         admin.MapPost("", CreateProductAsync)
             .WithName("CreateProduct")
             .WithSummary("Create a product")
-            .WithDescription("Admin only. Returns 201 with a `Location` header; 400 with per-field errors if invalid.")
+            .WithDescription("Returns 201 with a `Location` header; 400 with per-field errors if invalid.")
             .Produces<ProductDto>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
@@ -46,7 +44,7 @@ public static class ProductEndpoints
             .WithName("DeleteProduct")
             .WithSummary("Delete a product")
             .WithDescription(
-                "Admin only. Soft delete: the product leaves the catalog but stays on existing orders. " +
+                "Soft delete: the product leaves the catalog but stays on existing orders. " +
                 "Idempotent: deleting an already deleted product still returns 204. 404 if the ID never existed.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound);

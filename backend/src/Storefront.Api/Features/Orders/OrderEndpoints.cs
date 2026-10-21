@@ -116,7 +116,7 @@ public static class OrderEndpoints
 }
 
 public sealed record OrderLineRequest(
-    Guid ProductId,
+    [property: Description("A product from GET /api/products."), DefaultValue(typeof(Guid), "5eed0000-0000-4000-8000-000000000007")] Guid ProductId,
     [property: Description("1 to 100."), DefaultValue(1)] int Quantity);
 
 public sealed record CreateOrderRequest(

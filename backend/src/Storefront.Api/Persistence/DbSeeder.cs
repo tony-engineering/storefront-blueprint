@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Storefront.Api.Common;
+using Storefront.Api.Features.Orders;
 using Storefront.Api.Features.Products;
 
 namespace Storefront.Api.Persistence;
 
 /// <summary>
-/// Inserts the demo catalog when the database has no products yet (ARCHITECTURE.md §8).
+/// Inserts the demo catalog (and one paid demo order) when the database has no products yet (ARCHITECTURE.md §8).
 /// <list type="bullet">
 ///   <item><b>Idempotent:</b> any existing product, live or soft-deleted, means the store has been
 ///   seeded or is in use, so nothing is touched. Restarting the API never adds duplicates.</item>
@@ -31,6 +32,9 @@ public sealed class DbSeeder(StorefrontDbContext db, ILogger<DbSeeder> logger)
         /// <summary>Seeded already soft-deleted: in the database, but not in the catalog.</summary>
         public static readonly Guid Prototype = new("5eed0000-0000-4000-8000-0000000000ff");
     }
+
+    /// <summary>Fixed, so Swagger and demos can fetch a real order without creating one first.</summary>
+    public static readonly Guid DemoOrderId = new("0de20000-0000-4000-8000-000000000001");
 
     // Fixed rather than "now", so the seed data is identical on every run.
     private static readonly DateTimeOffset SeededAt = new(2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
@@ -70,17 +74,43 @@ public sealed class DbSeeder(StorefrontDbContext db, ILogger<DbSeeder> logger)
         return catalog;
     }
 
+    /// <summary>One <c>Paid</c> order for a single "The Burrow", built through the same domain methods a real checkout uses.</summary>
+    public static Order CreateDemoOrder(IReadOnlyList<Product> catalog)
+    {
+        var burrow = catalog.Single(p => p.Id == ProductIds.Burrow);
+        var order = Order.Create([new OrderLine(burrow.Id, burrow.Name, burrow.Price, 1)], SeededAt, DemoOrderId);
+
+        var attempt = order.AddPaymentAttempt("tok_success", SeededAt);
+        attempt.RecordChargeCall();
+        attempt.MarkSucceeded("ch_seed_0001", SeededAt);
+        order.MarkPaid(SeededAt);
+        return order;
+    }
+
     public async Task<SeedResult> SeedAsync(CancellationToken cancellationToken)
     {
         // Counts soft-deleted products too: a catalog whose products were all deleted is not "empty".
-        if (await db.Products.AnyAsync(cancellationToken))
+        var seedCatalog = !await db.Products.AnyAsync(cancellationToken);
+        // Checked on its own, so a database seeded before the demo order existed still gets it. Orders are never deleted.
+        var seedOrder = !await db.Orders.AnyAsync(o => o.Id == DemoOrderId, cancellationToken);
+
+        if (!seedCatalog && !seedOrder)
         {
-            logger.LogInformation("Seed skipped: the catalog already has products.");
+            logger.LogInformation("Seed skipped: the catalog and the demo order already exist.");
             return SeedResult.AlreadySeeded;
         }
 
+        // The demo order is built from the fixed catalog, so it does not depend on what is in the database now.
         var catalog = CreateCatalog();
-        db.Products.AddRange(catalog);
+        if (seedCatalog)
+        {
+            db.Products.AddRange(catalog);
+        }
+
+        if (seedOrder)
+        {
+            db.Orders.Add(CreateDemoOrder(catalog));
+        }
 
         try
         {
@@ -90,13 +120,13 @@ public sealed class DbSeeder(StorefrontDbContext db, ILogger<DbSeeder> logger)
         {
             // Another instance seeded between our check and our insert. Its transaction won; ours rolled back.
             db.ChangeTracker.Clear();
-            logger.LogInformation("Seed skipped: another instance seeded the catalog at the same time.");
+            logger.LogInformation("Seed skipped: another instance seeded at the same time.");
             return SeedResult.AlreadySeeded;
         }
 
         logger.LogInformation(
-            "Seeded the demo catalog: {Total} products ({Deleted} of them soft-deleted).",
-            catalog.Count, catalog.Count(p => p.IsDeleted));
+            "Seeded: catalog {Catalog} ({Total} products, {Deleted} soft-deleted), demo order {Order}.",
+            seedCatalog, catalog.Count, catalog.Count(p => p.IsDeleted), seedOrder);
         return SeedResult.Seeded;
     }
 }

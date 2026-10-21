@@ -37,15 +37,6 @@ public abstract class IntegrationTestBase(PostgresFixture database) : IAsyncLife
         return products[0];
     }
 
-    /// <summary>A client holding a token for one of the demo users ("admin" or "customer").</summary>
-    protected async Task<StorefrontClient> SignedInAsync(string user)
-    {
-        var client = new StorefrontClient(Api.CreateClient());
-        var token = (await client.GetTokenAsync(user, user, Ct)).ShouldHaveStatus(HttpStatusCode.OK).RequiredBody;
-        client.SignIn(token.AccessToken);
-        return client;
-    }
-
     protected static CreateOrderRequest OrderOf(ProductDto product, int quantity, string paymentToken) =>
         new([new OrderLineRequest(product.Id, quantity)], paymentToken);
 

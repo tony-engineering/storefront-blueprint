@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Storefront.IntegrationTests.Products;
 
-/// <summary>Only an admin may change the catalog; deleting a product must never rewrite an old order.</summary>
+/// <summary>The catalog can be changed through the admin routes; deleting a product must never rewrite an old order.</summary>
 [Collection(IntegrationCollection.Name)]
 public sealed class AdminProductTests(PostgresFixture database) : IntegrationTestBase(database)
 {
@@ -20,29 +20,10 @@ public sealed class AdminProductTests(PostgresFixture database) : IntegrationTes
     }
 
     [Fact]
-    public async Task Creating_a_product_needs_a_token()
+    public async Task Creating_a_product_that_shows_up_in_the_catalog()
     {
+
         var response = await Client.CreateProductAsync(NewHouse, Ct);
-
-        response.ShouldHaveStatus(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task Creating_a_product_is_forbidden_for_a_customer()
-    {
-        var customer = await SignedInAsync("customer");
-
-        var response = await customer.CreateProductAsync(NewHouse, Ct);
-
-        response.ShouldHaveStatus(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
-    public async Task Admin_creates_a_product_that_shows_up_in_the_catalog()
-    {
-        var admin = await SignedInAsync("admin");
-
-        var response = await admin.CreateProductAsync(NewHouse, Ct);
 
         response.ShouldHaveStatus(HttpStatusCode.Created);
         var created = response.RequiredBody;
@@ -62,34 +43,20 @@ public sealed class AdminProductTests(PostgresFixture database) : IntegrationTes
     [InlineData("Debt house", -5, "priceMinor")]
     public async Task Invalid_products_are_rejected_with_a_field_error(string name, long price, string field)
     {
-        var admin = await SignedInAsync("admin");
 
-        var response = await admin.CreateProductAsync(new CreateProductRequest(name, null, price), Ct);
+        var response = await Client.CreateProductAsync(new CreateProductRequest(name, null, price), Ct);
 
         response.ShouldHaveStatus(HttpStatusCode.BadRequest);
         Assert.Contains(field, response.RequiredProblem.Errors!.Keys);
     }
 
     [Fact]
-    public async Task Deleting_a_product_needs_an_admin()
+    public async Task Deleting_a_product_and_deleting_it_again_is_still_204()
     {
         var product = await AnySeededProductAsync();
-        var customer = await SignedInAsync("customer");
 
-        (await Client.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.Unauthorized);
-        (await customer.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.Forbidden);
-
-        Assert.Contains((await Client.GetProductsAsync(Ct)).RequiredBody, p => p.Id == product.Id);
-    }
-
-    [Fact]
-    public async Task Admin_deletes_a_product_and_deleting_it_again_is_still_204()
-    {
-        var admin = await SignedInAsync("admin");
-        var product = await AnySeededProductAsync();
-
-        (await admin.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NoContent);
-        (await admin.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NoContent);
+        (await Client.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NoContent);
+        (await Client.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NoContent);
 
         Assert.DoesNotContain((await Client.GetProductsAsync(Ct)).RequiredBody, p => p.Id == product.Id);
         (await Client.GetProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NotFound);
@@ -98,20 +65,18 @@ public sealed class AdminProductTests(PostgresFixture database) : IntegrationTes
     [Fact]
     public async Task Deleting_a_product_that_never_existed_is_404()
     {
-        var admin = await SignedInAsync("admin");
 
-        (await admin.DeleteProductAsync(Guid.NewGuid(), Ct)).ShouldHaveStatus(HttpStatusCode.NotFound);
+        (await Client.DeleteProductAsync(Guid.NewGuid(), Ct)).ShouldHaveStatus(HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task Deleting_a_product_does_not_rewrite_orders_already_placed()
     {
-        var admin = await SignedInAsync("admin");
         var product = await AnySeededProductAsync();
         var order = (await Client.PlaceOrderAsync(OrderOf(product, 2, "tok_success"), Ct))
             .ShouldHaveStatus(HttpStatusCode.Created).RequiredBody;
 
-        (await admin.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NoContent);
+        (await Client.DeleteProductAsync(product.Id, Ct)).ShouldHaveStatus(HttpStatusCode.NoContent);
 
         // The old order still shows what was bought, at the price paid.
         var retrieved = (await Client.GetOrderAsync(order.Id, Ct)).ShouldHaveStatus(HttpStatusCode.OK).RequiredBody;
@@ -126,20 +91,4 @@ public sealed class AdminProductTests(PostgresFixture database) : IntegrationTes
         again.ShouldHaveStatus(HttpStatusCode.UnprocessableEntity);
     }
 
-    [Fact]
-    public async Task A_garbage_token_is_unauthorized()
-    {
-        var client = new StorefrontClient(Api.CreateClient());
-        client.SignIn("not.a.token");
-
-        (await client.CreateProductAsync(NewHouse, Ct)).ShouldHaveStatus(HttpStatusCode.Unauthorized);
-    }
-
-    [Theory]
-    [InlineData("admin", "wrong")]
-    [InlineData("nobody", "nobody")]
-    public async Task Wrong_credentials_get_no_token(string user, string password)
-    {
-        (await Client.GetTokenAsync(user, password, Ct)).ShouldHaveStatus(HttpStatusCode.Unauthorized);
-    }
 }

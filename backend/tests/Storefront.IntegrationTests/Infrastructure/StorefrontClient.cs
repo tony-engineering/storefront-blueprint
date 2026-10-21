@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
@@ -55,18 +54,6 @@ public sealed class StorefrontClient(HttpClient http)
 
         return await SendAsync<OrderDto>(message, ct);
     }
-
-    public async Task<ApiResponse<TokenDto>> GetTokenAsync(string username, string password, CancellationToken ct) =>
-        await SendAsync<TokenDto>(
-            new HttpRequestMessage(HttpMethod.Post, "/api/auth/token")
-            {
-                Content = JsonContent.Create(new { username, password }, options: Json),
-            },
-            ct);
-
-    /// <summary>Sends this token with every following request.</summary>
-    public void SignIn(string accessToken) =>
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
     public async Task<ApiResponse<ProductDto>> GetProductAsync(Guid id, CancellationToken ct) =>
         await SendAsync<ProductDto>(new HttpRequestMessage(HttpMethod.Get, $"/api/products/{id}"), ct);

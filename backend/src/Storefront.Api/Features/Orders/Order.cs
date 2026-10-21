@@ -73,9 +73,9 @@ public sealed class Order
     /// <summary>
     /// A new <see cref="OrderStatus.Pending"/> order. Throws <see cref="ArgumentException"/> without lines
     /// or with the same product twice, and <see cref="CurrencyMismatchException"/> when lines are priced in
-    /// different currencies.
+    /// different currencies. <paramref name="id"/> is for seed data that needs a well-known ID; leave it out otherwise.
     /// </summary>
-    public static Order Create(IReadOnlyList<OrderLine> lines, DateTimeOffset now)
+    public static Order Create(IReadOnlyList<OrderLine> lines, DateTimeOffset now, Guid? id = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
         if (lines.Count == 0)
@@ -92,7 +92,7 @@ public sealed class Order
 
         var order = new Order
         {
-            Id = Guid.CreateVersion7(),
+            Id = id ?? Guid.CreateVersion7(),
             Status = OrderStatus.Pending,
             Total = total,
             CreatedAt = now,
