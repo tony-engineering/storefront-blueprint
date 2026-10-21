@@ -1,6 +1,6 @@
 # Storefront.IntegrationTests
 
-End-to-end tests of the API over real HTTP, against the same PostgreSQL-on-tmpfs setup the app runs on. They are written **test-first**: they describe the behaviour the backend must have, and they compile against the API skeleton in `backend/src/Storefront.Api`, which declares the contract types below. Until the backend is implemented they fail against the stubs: the database, its migration and the seeded catalog (`GET /api/products`) are in place, but the order routes still return 501 and `IPaymentReconciler` is not registered.
+End-to-end tests of the API over real HTTP, against the same PostgreSQL-on-tmpfs setup the app runs on. They were written **test-first**: they described the behaviour the backend had to have, and the backend was then implemented until they passed. They now guard that behaviour: payments (this file's tables), idempotency under repeated and parallel requests, validation, and admin access. `ARCHITECTURE.md` §12 lists every scenario.
 
 ## Running
 

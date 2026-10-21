@@ -42,7 +42,7 @@ The backend is a single .NET 10 Minimal API organised by feature (products, orde
 Resilience is built around the two hard requirements in the brief:
 
 - **Repeated requests:** order creation is protected by idempotency keys, so a retried `POST` returns the original result instead of creating a second order or charge.
-- **Partial failures:** orders follow an explicit state machine (`Pending`, `Paid`, `PaymentFailed`, `PaymentUnknown`, `PaymentUnavailable`, `NeedsAttention`). The order is saved *before* the payment gateway is called, a timeout is treated as "unknown" (202) rather than "failed", and a charge is never retried blindly. A background reconciler asks the gateway for the status of unclear payments instead of charging again.
+- **Partial failures:** orders follow an explicit state machine (`Pending`, `Paid`, `PaymentFailed`, `PaymentRetrying`, `PaymentUnknown`, `PaymentUnavailable`, `NeedsAttention`). The order is saved *before* the payment gateway is called, a timeout is treated as "unknown" (202) rather than "failed", and a charge is never retried blindly. A background reconciler asks the gateway for the status of unclear payments instead of charging again.
 - **Consistency:** money is stored as integer minor units, orders snapshot product names and prices, and optimistic concurrency (`xmin`) guards concurrent updates.
 
 Full details, diagrams, trade-offs and assumptions: [ARCHITECTURE.md](./ARCHITECTURE.md)
