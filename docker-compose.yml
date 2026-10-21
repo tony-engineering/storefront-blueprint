@@ -40,6 +40,33 @@ services:
     depends_on:
       - api                            # so `docker compose up web` starts the whole stack
 
+  # Only runs when asked: docker compose run --rm unit-tests [extra dotnet test args]
+  #
+  # Fast, no I/O and no Docker socket: .NET SDK image against the mounted repo (ARCHITECTURE.md §12).
+  unit-tests:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    profiles: ["tests"]
+    working_dir: /repo
+    volumes:
+      - .:/repo
+      - nuget-packages:/root/.nuget/packages
+      - dotnet-artifacts:/artifacts          # bin/obj stay out of the host's source tree
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    entrypoint:
+      - dotnet
+      - test
+      - backend/tests/Storefront.UnitTests
+      - --artifacts-path
+      - /artifacts
+      - --logger
+      - console;verbosity=normal
+      - --logger
+      - trx;LogFileName=unit-tests.trx
+      - --results-directory
+      - backend/TestResults
+
   # Only runs when asked: docker compose run --rm integration-tests [extra dotnet test args]
   #
   # Uses the .NET SDK image against the mounted repo, so nothing .NET is installed on the host.
