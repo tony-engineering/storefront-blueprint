@@ -27,8 +27,19 @@ public sealed record OrderDto(
     string? FailureReason,
     IReadOnlyList<PaymentAttemptDto> Payments);
 
+public sealed record CreateProductRequest(string Name, string? Description, long PriceMinor);
+
+public sealed record TokenDto(string AccessToken, string TokenType, int ExpiresIn);
+
+/// <summary>An RFC 9457 error body. <c>Errors</c> is present on validation failures.</summary>
+public sealed record ProblemDto(
+    string? Type, string? Title, int? Status, string? Detail, Dictionary<string, string[]>? Errors);
+
 public static class OrderStatuses
 {
+    public const string Pending = "Pending";
+    public const string PaymentUnknown = "PaymentUnknown";
+    public const string NeedsAttention = "NeedsAttention";
     public const string Paid = "Paid";
     public const string PaymentFailed = "PaymentFailed";
     public const string PaymentRetrying = "PaymentRetrying";
@@ -39,6 +50,8 @@ public static class PaymentAttemptStatuses
 {
     public const string Succeeded = "Succeeded";
     public const string Declined = "Declined";
+    public const string Unknown = "Unknown";
+    public const string Failed = "Failed";
     public const string Retrying = "Retrying";
     public const string ProviderUnavailable = "ProviderUnavailable";
 }
@@ -46,4 +59,5 @@ public static class PaymentAttemptStatuses
 public static class FailureReasons
 {
     public const string ProviderUnavailable = "payment_provider_unavailable";
+    public const string NotProcessed = "payment_not_processed";
 }

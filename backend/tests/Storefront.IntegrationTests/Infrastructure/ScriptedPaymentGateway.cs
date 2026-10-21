@@ -20,6 +20,7 @@ public sealed class ScriptedPaymentGateway(TimeProvider clock) : IPaymentGateway
     private readonly Dictionary<string, string> _declinedTokens = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RecordedCharge> _chargesByKey = new(StringComparer.Ordinal);
     private readonly List<GatewayCall> _calls = [];
+    private readonly Dictionary<string, bool> _timeoutTokens = new(StringComparer.Ordinal);
     private DateTimeOffset _outageEndsAt = DateTimeOffset.MinValue;
 
     /// <summary>Every charge call received, in order.</summary>
@@ -43,6 +44,16 @@ public sealed class ScriptedPaymentGateway(TimeProvider clock) : IPaymentGateway
     public void Decline(string paymentToken, string declineCode)
     {
         lock (_lock) { _declinedTokens[paymentToken] = declineCode; }
+    }
+
+    /// <summary>
+    /// Makes charges with this card time out: the caller gets no answer (<see cref="ChargeOutcome.Unknown"/>).
+    /// <paramref name="chargeGoesThrough"/> says whether the money was nevertheless taken, which only a status
+    /// lookup reveals.
+    /// </summary>
+    public void Timeout(string paymentToken, bool chargeGoesThrough)
+    {
+        lock (_lock) { _timeoutTokens[paymentToken] = chargeGoesThrough; }
     }
 
     /// <summary>Makes the provider unreachable from now (simulated time) for <paramref name="duration"/>.</summary>
@@ -73,16 +84,26 @@ public sealed class ScriptedPaymentGateway(TimeProvider clock) : IPaymentGateway
             }
             else
             {
-                var charge = new RecordedCharge(
-                    ChargeId: $"ch_{_chargesByKey.Count + 1}",
-                    IdempotencyKey: request.IdempotencyKey,
-                    OrderId: request.OrderId,
-                    PaymentToken: request.PaymentToken,
-                    AmountMinor: request.AmountMinor,
-                    Currency: request.Currency,
-                    At: now);
-                _chargesByKey.Add(request.IdempotencyKey, charge);
-                result = new ChargeResult(ChargeOutcome.Succeeded, ChargeId: charge.ChargeId);
+                var timesOut = _timeoutTokens.TryGetValue(request.PaymentToken, out var chargeGoesThrough);
+                var chargeId = "";
+                if (!timesOut || chargeGoesThrough)
+                {
+                    var charge = new RecordedCharge(
+                        ChargeId: $"ch_{_chargesByKey.Count + 1}",
+                        IdempotencyKey: request.IdempotencyKey,
+                        OrderId: request.OrderId,
+                        PaymentToken: request.PaymentToken,
+                        AmountMinor: request.AmountMinor,
+                        Currency: request.Currency,
+                        At: now);
+                    _chargesByKey.Add(request.IdempotencyKey, charge);
+                    chargeId = charge.ChargeId;
+                }
+
+                // A timeout looks the same to the caller whether or not the money was taken.
+                result = timesOut
+                    ? new ChargeResult(ChargeOutcome.Unknown)
+                    : new ChargeResult(ChargeOutcome.Succeeded, ChargeId: chargeId);
             }
 
             _calls.Add(new GatewayCall(now, request.IdempotencyKey, request.OrderId, request.PaymentToken, result.Outcome));
