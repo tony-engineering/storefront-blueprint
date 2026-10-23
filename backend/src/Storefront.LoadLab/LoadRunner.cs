@@ -221,17 +221,37 @@ public sealed class LoadRunner(
         long started, CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), clock);
+        // The stats call goes to the API under test, so it can hang when the API is saturated. It runs on its own,
+        // one at a time, and never holds up the one-second beat of the chart.
+        Task refresh = Task.CompletedTask;
         try
         {
             while (await timer.WaitForNextTickAsync(ct))
             {
-                var stats = await GetStatsAsync(http, run.Id, ct) ?? latest();
-                setLatest(stats);
-                run.AddSample(TakeSample(run, metrics, stats, started));
+                if (refresh.IsCompleted)
+                {
+                    refresh = RefreshStatsAsync();
+                }
+
+                run.AddSample(TakeSample(run, metrics, latest(), started));
             }
         }
         catch (OperationCanceledException)
         {
+        }
+
+        async Task RefreshStatsAsync()
+        {
+            try
+            {
+                if (await GetStatsAsync(http, run.Id, ct) is { } stats)
+                {
+                    setLatest(stats);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
         }
     }
 
