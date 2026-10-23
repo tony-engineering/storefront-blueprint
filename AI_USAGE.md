@@ -128,3 +128,31 @@ I asked for a plan to implement the Angular frontend, with an explicit "keep it 
 - **Environment trouble:** my Mac's shell lost access to the repo folder partway through `npm ci`, so the AI built and tested a copy in its cloud workspace and copied the files back. It also had to ask for permission to delete git's own `.lock` files, which a `git worktree add` had left behind.
 - **Limitation:** the order, payment and admin endpoints still return 501, so those pages were tested against mocked HTTP only. Only the product list works against the real API until the backend is implemented.
 
+
+---
+
+## 2026-10-23
+
+### Automatic deployment to Scaleway Kapsule
+
+I asked the AI for a plan to deploy automatically when all the CI tests pass, to my Kapsule cluster, and whether I needed to put an access key in GitHub. I was hesitating between plain Kubernetes manifests and Helm. The storefront is live at https://storefront.tony-engineering.com.
+
+- **Plan first, from the real cluster:** I gave the AI access to `kubectl` and `scw`. It looked at what the cluster already runs (ingress-nginx, cert-manager, external-dns, the CloudNativePG operator, kube-green) before proposing anything, so the chart reuses them: one Ingress with a Let's Encrypt certificate, and a CNPG database.
+- **My decisions:** Helm, because the cluster's other apps use it and `--atomic` rolls back a bad release. Migrations as their own step. The host `storefront.tony-engineering.com`.
+- **Why migrations are not run at app start:** I asked. The answer I kept: with several pods, each would race to migrate; a slow or failed migration would look like a crash loop; and the app should not need schema-change rights. So the API has a `migrate` command, run by a Helm hook Job before the new pods start. This led to a rule I saved for the project: each migration must work with the previous app version (add first, remove in a later release), because old pods run against the new schema during a rollout and a Helm rollback does not undo the schema. It is in `ARCHITECTURE.md` §8.
+- **Secrets:** I created the API key and the GitHub `production` environment myself, because the AI must not handle keys. The AI found that the Scaleway kubeconfig holds a legacy admin token that cannot be revoked, so CI builds its own kubeconfig from the cluster CA and uses the API secret key as the bearer token. It tested this with a temporary kubeconfig and deleted it. The environment accepts deployments from `main` only; the AI also scanned the repo for leaked keys before it goes public (clean).
+- **Pieces:** `deploy/database.yaml` (CNPG cluster on a retained volume, applied outside Helm so no Helm action can delete the data), `deploy/chart/` (migrate hook, API, web, Ingress), and a `deploy` job in `ci.yml` that builds and pushes both images, checks the commit is still the tip of `main`, and runs `helm upgrade --install --atomic`. Helm is pinned and installed by a SHA-pinned action. `ARCHITECTURE.md` §13 and §16 describe it.
+- **What I corrected:** the AI tried to create the registry namespace itself; the tool refused (it makes a public resource), so it stopped and asked me, and I created it.
+- **First push, red for an old reason:** the integration tests did not compile (`HttpResponseHeaders`, a `using` removed by an earlier "Reconcile" commit), so `main` was already red and `deploy` was skipped, as designed. The AI restored the line and ran the integration tests locally in Docker (46 of 46 passed) before pushing again. It first misread an older results file with 87 failures; it caught the mistake by checking the newest file.
+- **The deploy then failed three times, none from our code:**
+  - *Slow image pulls.* The PostgreSQL image (253 MB) took 5 min 20 s on one node. The deploy job's 10-minute wait for the database ran out. Nothing was installed, so I re-ran the job.
+  - *Memory starved nodes.* I asked the AI to check the node metrics. The three DEV1-M nodes (about 2.3 GB usable each) ran at 86 to 110% memory, while CPU was at 14 to 28%. The migration then timed out and one pod crashed with exit 139.
+  - *The autoscaler did not add a node.* I asked why, with a pool of 2 to 4. The AI showed it scales on pods that cannot be scheduled, using their requests; no pod was `Pending`, and requests were only 77 to 89% because other apps ask for little and use a lot. So it was working as designed. I then asked the AI to resize the pool to 4 with `scw`, and it did; the autoscaler removed the extra node again soon after.
+- **Last obstacle:** one node reported "container runtime is down" with a full disk (image garbage collection failing), and the database and a migrate pod were on it. The database pod was killed by its liveness probe, although it used almost no CPU or memory. The AI laid out the choices (wait for auto-healing, replace the node, or cancel) and asked me; it changed nothing more on the cluster. After a while the cluster settled and the site came up.
+- **A question it answered plainly:** I asked whether Kubernetes can upgrade Helm. No: Helm is a client that only runs inside the CI job.
+- **Limitations and open points:**
+  - The API uses the database owner role; a DML-only role is next. There are no database backups yet.
+  - The demo catalog is seeded in production (`seedDemoCatalog: true`); turn it off for a real shop.
+  - The cluster is too small for another app: add nodes or raise memory requests so the autoscaler can see the real load. One node (`e6e101`) still has a nearly full disk and should be replaced.
+  - Not yet done: require SHA-pinned actions in the repo settings, and turn on secret scanning and push protection when the repo goes public. Branch rules for the `production` environment may not be enforced on a private repo on the Free plan.
+  - The AI did not check the live site after the last run; I opened it myself and it worked.
