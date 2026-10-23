@@ -120,8 +120,9 @@ jobs:
           if-no-files-found: warn
 
   # Docker builds don't wait for tests: they check packaging, not behaviour, and a
-  # failing test should not hide a broken image. Images are tagged with the commit SHA
-  # and not pushed yet.
+  # failing test should not hide a broken image. Images are tagged with the commit SHA.
+  # They are not pushed here: only the deploy job holds registry credentials, and it
+  # rebuilds from this job's cache once every test has passed.
   backend-docker:
     name: backend-docker
     runs-on: ubuntu-latest
@@ -186,3 +187,125 @@ jobs:
 
       - name: Unit tests
         run: npm run test:ci
+
+  # Continuous deployment to the Scaleway Kapsule cluster (ARCHITECTURE.md §13).
+  # Runs only on a push to main, once every other job has passed.
+  #
+  # Secrets live in the `production` environment, which only main may use: fork PRs and other
+  # branches never see them. They reach this job only, never a third-party action: registry login
+  # and kubeconfig are plain CLI calls. The API secret key is also the Kubernetes token (Kapsule IAM),
+  # so revoking or expiring the key cuts cluster access too.
+  deploy:
+    name: deploy
+    needs: [backend-integration, backend-docker, frontend-docker, frontend-unit-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: https://storefront.tony-engineering.com
+    # One deploy at a time. A newer queued deploy replaces an older queued one; a running one finishes.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      REGISTRY: rg.fr-par.scw.cloud/storefront
+      NAMESPACE: storefront
+      HELM_VERSION: v3.22.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # CI has no workflow-level concurrency, so runs can finish out of order. Deploy only the
+      # commit that is still the tip of main; a newer commit's own run deploys that one.
+      - name: Check this commit is still the tip of main
+        id: tip
+        run: |
+          tip="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$tip" == "$GITHUB_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main has moved on to $tip; skipping, that commit's run deploys it."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to Scaleway Container Registry
+        if: steps.tip.outputs.current == 'true'
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+        run: echo "$SCW_SECRET_KEY" | docker login rg.fr-par.scw.cloud --username nologin --password-stdin
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: steps.tip.outputs.current == 'true'
+
+      - name: Push storefront-api image
+        if: steps.tip.outputs.current == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.REGISTRY }}/storefront-api:${{ github.sha }}
+          cache-from: type=gha,scope=storefront-api
+
+      - name: Push storefront-web image
+        if: steps.tip.outputs.current == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/storefront-web:${{ github.sha }}
+          cache-from: type=gha,scope=storefront-web
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        if: steps.tip.outputs.current == 'true'
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # Built from the cluster's public CA and the API secret key. The Scaleway kubeconfig endpoint
+      # is not used: it returns the legacy admin token, which outlives the API key.
+      - name: Write kubeconfig
+        if: steps.tip.outputs.current == 'true'
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_CLUSTER_ID: ${{ vars.SCW_CLUSTER_ID }}
+          SCW_REGION: ${{ vars.SCW_REGION }}
+          SCW_CLUSTER_CA: ${{ vars.SCW_CLUSTER_CA }}
+        run: |
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          umask 077
+          echo "$SCW_CLUSTER_CA" | base64 -d > "$RUNNER_TEMP/cluster-ca.crt"
+          kubectl config set-cluster scw \
+            --server="https://${SCW_CLUSTER_ID}.api.k8s.${SCW_REGION}.scw.cloud:6443" \
+            --certificate-authority="$RUNNER_TEMP/cluster-ca.crt" --embed-certs
+          kubectl config set-credentials ci --token="$SCW_SECRET_KEY"
+          kubectl config set-context ci --cluster=scw --user=ci --namespace="$NAMESPACE"
+          kubectl config use-context ci
+          echo "KUBECONFIG=$KUBECONFIG" >> "$GITHUB_ENV"
+
+      # Outside the Helm release on purpose (deploy/database.yaml explains why).
+      - name: Apply namespace and database
+        if: steps.tip.outputs.current == 'true'
+        run: |
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f deploy/database.yaml
+          kubectl wait cluster/storefront-db --for=condition=Ready --timeout=10m
+
+      # The pre-upgrade hook runs migrations first. --atomic rolls the pods back if the release
+      # does not become ready; it does not roll back the schema.
+      - name: Deploy with Helm
+        if: steps.tip.outputs.current == 'true'
+        run: >
+          helm upgrade --install storefront deploy/chart
+          --namespace "$NAMESPACE"
+          --set image.tag="$GITHUB_SHA"
+          --atomic --wait --timeout 10m
+
+      - name: Show cluster state
+        if: ${{ failure() && steps.tip.outputs.current == 'true' }}
+        run: |
+          kubectl get pods,jobs,ingress,certificate -o wide || true
+          kubectl logs job/storefront-migrate --tail=100 || true
+          kubectl get events --sort-by=.lastTimestamp | tail -30 || true
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kubeconfig" "$RUNNER_TEMP/cluster-ca.crt" ~/.docker/config.json

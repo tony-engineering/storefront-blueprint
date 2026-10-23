@@ -2,8 +2,8 @@ namespace Storefront.Api.Persistence;
 
 /// <summary>
 /// The <c>Database</c> configuration section. Both switches are off by default (appsettings.json)
-/// and on in Development and in the integration tests. In a multi-instance production deployment,
-/// migrations would run as a separate pipeline step and there would be no demo data.
+/// and on in Development and in the integration tests. In the Kubernetes deployment, migrations run as
+/// a separate step (<c>Storefront.Api migrate</c>, a Helm pre-upgrade Job) and API pods start with both off.
 /// </summary>
 public sealed class DatabaseOptions
 {

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: storefront
+description: Storefront API and web app, with a pre-upgrade migration Job (ARCHITECTURE.md §13).
+type: application
+version: 0.1.0

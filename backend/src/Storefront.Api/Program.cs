@@ -35,6 +35,14 @@ app.MapHealthChecks("/health").ExcludeFromDescription();
 app.MapProductEndpoints();
 app.MapOrderEndpoints();
 
+// `dotnet Storefront.Api.dll migrate`: the deploy pipeline's migration step (ARCHITECTURE.md §8).
+// Applies migrations, seeds if Database:SeedOnStartup is on, and exits without serving requests.
+if (args is ["migrate"])
+{
+    await app.MigrateDatabaseAsync();
+    return;
+}
+
 await app.InitialiseDatabaseAsync();
 
 await app.RunAsync();

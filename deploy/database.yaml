@@ -1,0 +1,32 @@
+# PostgreSQL for the storefront, run by the cluster's CloudNativePG operator (ARCHITECTURE.md §13).
+#
+# Kept out of the Helm chart on purpose: the database outlives app releases. A failed first
+# `helm install --atomic` or a `helm uninstall` must never delete the orders table.
+# The deploy job applies this file before Helm runs, so the migration Job always finds a database.
+#
+# CNPG creates the `storefront-db-app` secret (username, password, host, port, dbname) for the
+# database owner. The chart reads it; no database password goes through GitHub.
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: storefront-db
+  namespace: storefront
+spec:
+  instances: 1
+  # Keep the major in step with docker-compose.yml and PostgresFixture.cs.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18
+  bootstrap:
+    initdb:
+      database: storefront
+      owner: storefront
+  storage:
+    size: 5Gi
+    # Retain: deleting the PVC by mistake keeps the Scaleway volume, and the data with it.
+    storageClass: sbs-default-retain
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

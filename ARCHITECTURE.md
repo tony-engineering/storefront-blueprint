@@ -291,7 +291,8 @@ api:
 ### Schema and data
 
 - **EF Core migrations** live in `Persistence/Migrations`. With a single provider they stay simple, and they are the same artifact a persistent deployment would use.
-- On startup the API runs `Database.MigrateAsync()`, then an idempotent `DbSeeder` inserts the hardcoded catalog if it is empty. Both happen before the API accepts requests. They are switched by `Database:MigrateOnStartup` and `Database:SeedOnStartup`: off in `appsettings.json`, on in `appsettings.Development.json` (used by `dotnet run` and Docker Compose) and in the integration tests. In a multi-instance production deployment, migrations would run as a separate pipeline step instead, and there would be no demo data.
+- On startup the API runs `Database.MigrateAsync()`, then an idempotent `DbSeeder` inserts the hardcoded catalog if it is empty. Both happen before the API accepts requests. They are switched by `Database:MigrateOnStartup` and `Database:SeedOnStartup`: off in `appsettings.json`, on in `appsettings.Development.json` (used by `dotnet run` and Docker Compose) and in the integration tests. In the Kubernetes deployment (§13), migrations run as a separate step instead: `dotnet Storefront.Api.dll migrate` applies them (and seeds if `Database:SeedOnStartup` is on), then exits without serving. A Helm pre-upgrade Job runs it once per deploy, before the new pods start, and the API pods start with both switches off.
+- **Every migration must work with the previous app version.** During a rolling update the old pods run against the new schema, and a Helm rollback restores the pods but not the schema. Add first; drop or rename only in a later release, once no running version uses the old shape.
 - **Demo catalog** (`Persistence/DbSeeder.cs`): seven tiny houses plus one product that is seeded already soft-deleted, so the catalog visibly hides deleted products. IDs are fixed (`5eed0000-0000-4000-8000-0000000000NN`), so demos and tests can refer to products by ID. Seed products are built through `Product.Create`, the same factory the admin endpoint uses, so seed data cannot bypass validation.
 - **Seeding is idempotent and safe to run concurrently.** It does nothing if any product exists, live or deleted, so restarting the API never duplicates the catalog. The catalog is inserted in one transaction. If two instances seed an empty database at the same time, the slower one hits a primary-key violation on the fixed IDs, rolls back and logs that the catalog was already seeded.
 - Check constraints on `Products` (positive price, ISO 4217 currency) back up the domain rules at the database level.
@@ -390,6 +391,7 @@ flowchart LR
     Push --> BeDocker["backend-docker"]
     Push --> FeDocker["frontend-docker<br/>(includes production build)"]
     Push --> Fe["frontend<br/>(lint · test)"]
+    Int & BeDocker & FeDocker & Fe --> Deploy["deploy<br/>(push to main only)"]
 
     Manual(["manual trigger<br/>(workflow_dispatch)"]) --> Load["load-test (k6)<br/>separate workflow"]
 ```
@@ -401,16 +403,33 @@ flowchart LR
 | `backend-docker` | build `./backend` as `storefront-api:<commit SHA>` (no push) | — |
 | `frontend-docker` | build `./frontend` as `storefront-web:<commit SHA>` (no push); its Dockerfile runs `ng build --configuration production`, so AOT errors and bundle budgets fail here | — |
 | `frontend` | setup Node 22 → `npm ci` → lint → unit tests | — |
+| `deploy` | push both images → apply namespace and database → `helm upgrade --install --atomic`. Push to `main` only, see below | all of the above |
 
 - **Integration after unit:** unit tests take seconds and need no Docker. If they fail, the integration tests would mostly report the same bug through HTTP, after a PostgreSQL container start. On a green run the cost is that integration tests start a few seconds later.
 - **Docker builds don't wait for tests:** they check different things (Dockerfiles, packaging, the production build), and a failing test should not hide a broken image. Running them alongside the tests reports every failure in one run and keeps the wall-clock time to the longest chain.
 - **The frontend is built once per run**, inside `frontend-docker`; the `frontend` job only lints and tests.
 - Every job must pass for the run to be green. The integration tests were written before the backend (test-first); while the backend was being built `backend-integration` ran with `continue-on-error: true` so its failures stayed visible without turning the run red. The flag was removed once the backend made them pass.
-- **Image tags:** each image is tagged with the full commit SHA (`github.sha`), so an image always maps to exactly one commit. Images are not pushed yet; pushing to a registry and moving a `latest` tag come later.
+- **Image tags:** each image is tagged with the full commit SHA (`github.sha`), so an image always maps to exactly one commit. There is no `latest` tag. The Docker jobs only build; the `deploy` job pushes, rebuilding from their layer cache.
 - **Actions pinned to commit SHAs:** every third-party action is referenced by its full commit SHA, with the version in a comment (`actions/checkout@<sha> # v5`). A tag can be moved to different code; a SHA cannot, which matters once the pipeline can deploy code that handles payments.
 - Test results are published as TRX files and uploaded as artifacts, so failures are readable in the Actions UI.
 - NuGet and npm caches are enabled; Docker layers use the GitHub Actions cache.
 - `ubuntu-latest` runners include Docker, so Testcontainers needs no extra setup.
+
+### Deployment — Scaleway Kapsule
+
+Every green push to `main` deploys to `https://storefront.tony-engineering.com`.
+
+| Piece | Where | Why |
+|---|---|---|
+| Images | `rg.fr-par.scw.cloud/storefront/storefront-{api,web}:<sha>` | One image per commit. The namespace is public, like the source |
+| Database | `deploy/database.yaml`: a CloudNativePG `Cluster`, applied with `kubectl` | Outlives app releases: a failed first install or a `helm uninstall` never deletes orders. CNPG generates the password; it never goes through GitHub |
+| App | `deploy/chart`: API, web, Ingress, migration Job | `--atomic` rolls the pods back if they don't become ready. The pre-upgrade hook runs migrations before the new pods start (§8) |
+| Routing | Ingress `nginx`: `/api` → API, `/` → web | Same origin, no CORS. cert-manager issues TLS; external-dns creates the DNS record |
+
+- **Secrets:** `SCW_ACCESS_KEY` and `SCW_SECRET_KEY` live in the GitHub `production` environment, which only `main` may use. Pull requests (forks included) and other branches never get them. Only the `deploy` job reads them, and no third-party action does: registry login and kubeconfig are plain CLI calls. Variables: `SCW_PROJECT_ID`, `SCW_CLUSTER_ID`, `SCW_REGION`, `SCW_CLUSTER_CA` (the cluster's public CA certificate).
+- **Cluster login:** with Kapsule IAM, the API secret key is the Kubernetes bearer token, so the key's expiry or revocation also ends cluster access. The Scaleway kubeconfig endpoint is not used: it returns the legacy admin token, which outlives the key.
+- **Out-of-order runs:** CI runs are never cancelled, so an older run can finish after a newer one. `deploy` only proceeds if its commit is still the tip of `main`, and deploys queue one at a time.
+- **If the key leaks:** delete it in Scaleway IAM, then reset the cluster's legacy admin token (`scw k8s cluster reset-admin-token`), since anyone holding the key could have fetched it.
 
 ### `load-test.yml` — manual only
 
@@ -478,8 +497,8 @@ The `integration-tests` service sits under a `tests` Compose profile, so `docker
 
 | Decision | Trade-off | Next step for real money |
 |---|---|---|
-| PostgreSQL on tmpfs, durability off | State lost when the database container restarts, including unresolved payments; app needs Docker | Remove the tmpfs and durability flags, add a volume or managed PostgreSQL; migrations already exist |
-| Migrations applied at app startup | Unsafe with many instances starting at once | Run migrations as a pipeline step |
+| PostgreSQL on tmpfs, durability off (local only) | State lost when the database container restarts, including unresolved payments | The deployment uses CNPG on a retained volume; next: backups to object storage |
+| API and migrations share the database owner role | A bug or injection in the API could alter or drop tables | A DML-only role for the API; only the migration Job keeps DDL rights |
 | Background retries only for "unavailable", fixed retry limit | Customer gets an answer in about a minute but must retry themselves after a long outage; every order keeps hitting a provider that is down | Circuit breaker that fails fast while the provider is down; notify the customer when it recovers |
 | Polling reconciler | Single instance, simple | Message broker + outbox for payment events |
 | No auth | Admin routes are open | Identity provider (OIDC) + policy on `/api/admin/*` |

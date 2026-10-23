@@ -35,23 +35,38 @@ public static class PersistenceExtensions
     /// Runs before the API accepts requests, so the first request never sees a missing table or an empty store.
     /// Any failure stops the start-up: an API without its schema would only fail later, on every request.
     /// </summary>
-    public static async Task InitialiseDatabaseAsync(this WebApplication app, CancellationToken cancellationToken = default)
+    public static Task InitialiseDatabaseAsync(this WebApplication app, CancellationToken cancellationToken = default)
     {
         var options = app.Services.GetRequiredService<IOptions<DatabaseOptions>>().Value;
-        if (!options.MigrateOnStartup && !options.SeedOnStartup)
+        return app.ApplyDatabaseAsync(options.MigrateOnStartup, options.SeedOnStartup, cancellationToken);
+    }
+
+    /// <summary>
+    /// The deploy pipeline's migration step: always applies migrations, and seeds only if
+    /// <see cref="DatabaseOptions.SeedOnStartup"/> is on. Runs once per deploy, before the new API pods start.
+    /// </summary>
+    public static Task MigrateDatabaseAsync(this WebApplication app, CancellationToken cancellationToken = default)
+    {
+        var options = app.Services.GetRequiredService<IOptions<DatabaseOptions>>().Value;
+        return app.ApplyDatabaseAsync(migrate: true, options.SeedOnStartup, cancellationToken);
+    }
+
+    private static async Task ApplyDatabaseAsync(this WebApplication app, bool migrate, bool seed, CancellationToken cancellationToken)
+    {
+        if (!migrate && !seed)
         {
             return;
         }
 
         await using var scope = app.Services.CreateAsyncScope();
 
-        if (options.MigrateOnStartup)
+        if (migrate)
         {
             var db = scope.ServiceProvider.GetRequiredService<StorefrontDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
         }
 
-        if (options.SeedOnStartup)
+        if (seed)
         {
             await scope.ServiceProvider.GetRequiredService<DbSeeder>().SeedAsync(cancellationToken);
         }

@@ -1,0 +1,38 @@
+# Migrations as their own step (ARCHITECTURE.md §8). Helm runs this Job before it touches the
+# Deployments, and waits for it. If it fails, `helm upgrade --atomic` stops and the old pods keep
+# serving. Each migration must still work with the previous app version: the old pods run against
+# the new schema during the rollout, and a Helm rollback does not undo the schema.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: storefront-migrate
+  labels:
+    {{- include "storefront.labels" . | nindent 4 }}
+    app.kubernetes.io/name: storefront-migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    # Keep a failed Job for its logs; the next deploy replaces it.
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: storefront-migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: {{ include "storefront.image" (dict "root" . "name" "storefront-api") }}
+          args: [migrate]
+          env:
+            {{- include "storefront.databaseEnv" . | nindent 12 }}
+            - name: Database__SeedOnStartup
+              value: {{ .Values.seedDemoCatalog | quote }}
+          securityContext:
+            {{- include "storefront.apiSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

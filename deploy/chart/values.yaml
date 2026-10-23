@@ -1,0 +1,37 @@
+image:
+  registry: rg.fr-par.scw.cloud/storefront
+  # The commit SHA; the deploy job sets it with --set image.tag=$GITHUB_SHA.
+  tag: ""
+
+host: storefront.tony-engineering.com
+ingress:
+  className: nginx
+  clusterIssuer: letsencrypt-prod
+
+# The secret CloudNativePG creates for deploy/database.yaml.
+database:
+  secretName: storefront-db-app
+
+# The migration Job inserts the demo catalog when the products table is empty.
+# Turn off for a real shop (ARCHITECTURE.md §8).
+seedDemoCatalog: true
+
+api:
+  # One replica is enough today. More is safe: orders use xmin optimistic concurrency, and the
+  # reconciler charges with the same idempotency key, so two reconcilers can't double-charge.
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+web:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi

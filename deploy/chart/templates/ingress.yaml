@@ -1,0 +1,27 @@
+# One host, same origin for the browser: /api goes to the API, everything else to the web app.
+# external-dns creates the DNS record; cert-manager gets the TLS certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: storefront
+  labels:
+    {{- include "storefront.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts: [{{ .Values.host }}]
+      secretName: storefront-tls
+  rules:
+    - host: {{ .Values.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { name: http } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web, port: { name: http } }
