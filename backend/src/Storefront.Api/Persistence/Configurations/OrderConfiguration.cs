@@ -44,6 +44,9 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Navigation(o => o.Payments).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasIndex(o => o.Status);
+
+        // Lab stats group by run; the janitor deletes by run and age.
+        builder.HasIndex(o => o.LabRunId).HasFilter("\"LabRunId\" IS NOT NULL");
     }
 }
 

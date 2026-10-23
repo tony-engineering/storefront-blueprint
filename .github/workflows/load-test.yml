@@ -1,23 +1,25 @@
-# Load test: manual only (ARCHITECTURE.md §12 and §13).
+# Load test: manual only (ARCHITECTURE.md §12, §13 and §17).
 #
-# A separate workflow so it can never block or slow CI on push. Failing k6
-# thresholds turn this run red without affecting CI status.
-#
-# Expects loadtests/load-test.js, which reads BASE_URL, VUS and DURATION from
-# k6's environment (__ENV) and defines the thresholds (p95 < 500 ms, error rate
-# < 1% excluding expected 409s).
+# A separate workflow so it can never block or slow CI on push. It starts the stack, asks the
+# load generator (backend/src/Storefront.LoadLab) to run one test from its catalog, waits for it
+# and fails when the run fails or any audit check fails. The same load generator serves the Lab page.
 
 name: Load test
 
 on:
   workflow_dispatch:
     inputs:
-      vus:
-        description: "Virtual users"
-        default: "50"
-      duration:
-        description: "Duration (k6 format, e.g. 30s, 2m, 1m30s)"
-        default: "2m"
+      test:
+        description: "Test to run"
+        type: choice
+        default: flash-sale
+        options:
+          - steady
+          - flash-sale
+          - ramp
+          - outage
+          - slow-provider
+          - retry-storm
 
 # One load test at a time: two runs on the same runner pool would skew each other's numbers.
 concurrency:
@@ -29,65 +31,67 @@ permissions:
 
 jobs:
   load-test:
-    name: load-test (k6)
+    name: load-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       # Inputs go through env rather than ${{ }} in scripts, so they can't inject shell.
-      VUS: ${{ inputs.vus }}
-      DURATION: ${{ inputs.duration }}
-      BASE_URL: http://localhost:8080
-      K6_SCRIPT: loadtests/load-test.js
+      TEST: ${{ inputs.test }}
+      API_URL: http://localhost:8080
+      LAB_URL: http://localhost:8081
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Validate inputs
-        run: |
-          if ! [[ "$VUS" =~ ^[1-9][0-9]{0,3}$ ]]; then
-            echo "::error::vus must be a whole number between 1 and 9999 (got '$VUS')"
-            exit 1
-          fi
-          if ! [[ "$DURATION" =~ ^([0-9]+(ms|s|m|h))+$ ]]; then
-            echo "::error::duration must use k6's format, e.g. 30s, 2m or 1m30s (got '$DURATION')"
-            exit 1
-          fi
-          if [[ ! -f "$K6_SCRIPT" ]]; then
-            echo "::error file=$K6_SCRIPT::$K6_SCRIPT is missing; add the k6 scenarios before running this workflow"
-            exit 1
-          fi
-
-      - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
-
       - name: Start the stack
-        run: docker compose up -d --build
+        run: docker compose up -d --build api loadlab
 
-      - name: Wait for /health
+      - name: Wait for the API and the load generator
         run: |
           for i in $(seq 1 60); do
-            if curl -fsS "$BASE_URL/health" > /dev/null; then
-              echo "API healthy after $((i * 2))s"
+            if curl -fsS "$API_URL/health" > /dev/null && curl -fsS "$LAB_URL/api/lab/health" > /dev/null; then
+              echo "Healthy after $((i * 2))s"
               exit 0
             fi
             sleep 2
           done
-          echo "::error::API did not report healthy within 120s"
+          echo "::error::The stack did not report healthy within 120s"
           exit 1
 
-      - name: Run k6
-        run: >
-          k6 run
-          --env BASE_URL="$BASE_URL"
-          --env VUS="$VUS"
-          --env DURATION="$DURATION"
-          --summary-export k6-summary.json
-          "$K6_SCRIPT"
+      - name: Run the test
+        run: |
+          curl -fsS -X POST "$LAB_URL/api/lab/runs" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg t "$TEST" '{testId: $t}')" > started.json
+          run_id="$(jq -r .id started.json)"
+          echo "Run $run_id of $TEST"
 
-      - name: Upload k6 summary
+          # The slowest tests take about 2 min to send, then up to 4 min to settle.
+          for i in $(seq 1 450); do
+            curl -fsS "$LAB_URL/api/lab/runs/$run_id" > run.json
+            phase="$(jq -r .phase run.json)"
+            echo "$(date +%T) $phase $(jq -r .percent run.json)%"
+            if [[ "$phase" == "Done" || "$phase" == "Failed" ]]; then
+              break
+            fi
+            sleep 2
+          done
+
+          jq '{phase, error, audit}' run.json
+          if [[ "$(jq -r .phase run.json)" != "Done" ]]; then
+            echo "::error::The run did not finish: $(jq -r '.error // .phase' run.json)"
+            exit 1
+          fi
+          if [[ "$(jq '[.audit[] | select(.result != "pass")] | length' run.json)" != "0" ]]; then
+            echo "::error::At least one audit check failed"
+            exit 1
+          fi
+
+      - name: Upload the run
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: k6-summary
-          path: k6-summary.json
+          name: load-test-run
+          path: run.json
           if-no-files-found: warn
 
       - name: Show container logs

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Storefront.Api/Storefront.Api.csproj" />
+    <Project Path="src/Storefront.LoadLab/Storefront.LoadLab.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Storefront.IntegrationTests/Storefront.IntegrationTests.csproj" />

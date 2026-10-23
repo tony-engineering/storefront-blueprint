@@ -53,6 +53,7 @@ Three containers locally (`web`, `api`, `db`). No message broker, no separate pa
 | Auth | None | Deliberate: the data is in-memory and a restart resets everything. Admin routes live under `/api/admin/*`, so an authorization policy can be added to that one route group later. |
 | Frontend | Angular (standalone components, signals) | Required by the brief. |
 | CI | GitHub Actions | Runs unit + integration tests on every push to `main`; load test on demand. |
+| Load testing | .NET service (`Storefront.LoadLab`) | One load generator serves the Lab page and the manual CI workflow (§17). |
 
 ## 3. Repository layout
 
@@ -67,12 +68,13 @@ Three containers locally (`web`, `api`, `db`). No message broker, no separate pa
 │   │   ├── Idempotency/         # filter, record entity, request hashing
 │   │   ├── Persistence/         # DbContext, entity configs, seeder, Migrations/
 │   │   └── Program.cs
+│   ├── src/Storefront.LoadLab/    # the load generator behind the Lab page (§17)
 │   ├── tests/Storefront.UnitTests/
 │   ├── tests/Storefront.IntegrationTests/
-│   └── Dockerfile
+│   ├── Dockerfile
+│   └── Dockerfile.loadlab
 ├── frontend/                    # Angular app + Dockerfile + nginx.conf
 │   └── src/ui-kit/              # storefront CSS/JS kit (sf- classes), no build step; see its README
-├── loadtests/                   # k6 scripts
 ├── .github/workflows/
 │   ├── ci.yml                   # every push
 │   └── load-test.yml            # manual only
@@ -356,14 +358,11 @@ Scenarios, by file:
 
 Angular unit tests (cart service, checkout component, interceptor) run with the Angular CLI test runner in CI.
 
-### Load test — `loadtests/` (k6)
+### Load test — the Lab (§17)
 
-Not part of normal CI (see §13). Scenarios:
-- **Browse:** ramping virtual users on `GET /api/products`.
-- **Checkout:** users placing orders with unique keys and mixed tokens.
-- **Retry storm:** many concurrent requests sharing a few keys, then a check that each key produced exactly one order.
+Not part of normal CI (see §13). The .NET load generator in `backend/src/Storefront.LoadLab` runs a fixed catalog of tests (steady traffic, a flash sale, a ramp, a provider outage, a slow provider and a retry storm), either from the Lab page or from the manual workflow. Every run ends with an audit: orders created match the unique keys that got 201/202, one order per key, nothing left unsettled, successful payments ended `Paid`, no 5xx. A failed check fails the workflow.
 
-Thresholds: p95 latency < 500 ms, error rate < 1% (excluding expected 409s).
+Unit tests cover the schedule math, the one-run lock and cooldown, and a runner against a stand-in API. Integration tests cover the `X-Lab-Run` tag, the stats endpoint and the janitor.
 
 ## 13. CI — GitHub Actions
 
@@ -393,7 +392,7 @@ flowchart LR
     Push --> Fe["frontend<br/>(lint · test)"]
     Int & BeDocker & FeDocker & Fe --> Deploy["deploy<br/>(push to main only)"]
 
-    Manual(["manual trigger<br/>(workflow_dispatch)"]) --> Load["load-test (k6)<br/>separate workflow"]
+    Manual(["manual trigger<br/>(workflow_dispatch)"]) --> Load["load-test<br/>separate workflow"]
 ```
 
 | Job | Steps | Depends on |
@@ -423,8 +422,8 @@ Every green push to `main` deploys to `https://storefront.tony-engineering.com`.
 |---|---|---|
 | Images | `rg.fr-par.scw.cloud/storefront/storefront-{api,web}:<sha>` | One image per commit. The namespace is public, like the source |
 | Database | `deploy/database.yaml`: a CloudNativePG `Cluster`, applied with `kubectl` | Outlives app releases: a failed first install or a `helm uninstall` never deletes orders. CNPG generates the password; it never goes through GitHub |
-| App | `deploy/chart`: API, web, Ingress, migration Job | `--atomic` rolls the pods back if they don't become ready. The pre-upgrade hook runs migrations before the new pods start (§8) |
-| Routing | Ingress `nginx`: `/api` → API, `/` → web | Same origin, no CORS. cert-manager issues TLS; external-dns creates the DNS record |
+| App | `deploy/chart`: API, web, load generator, Ingress, migration Job | `--atomic` rolls the pods back if they don't become ready. The pre-upgrade hook runs migrations before the new pods start (§8) |
+| Routing | Ingress `nginx`: `/api/lab` → load generator, `/api` → API, `/` → web | Same origin, no CORS. cert-manager issues TLS; external-dns creates the DNS record |
 
 - **Secrets:** `SCW_ACCESS_KEY` and `SCW_SECRET_KEY` live in the GitHub `production` environment, which only `main` may use. Pull requests (forks included) and other branches never get them. Only the `deploy` job reads them, and no third-party action does: registry login and kubeconfig are plain CLI calls. Variables: `SCW_PROJECT_ID`, `SCW_CLUSTER_ID`, `SCW_REGION`, `SCW_CLUSTER_CA` (the cluster's public CA certificate).
 - **Cluster login:** with Kapsule IAM, the API secret key is the Kubernetes bearer token, so the key's expiry or revocation also ends cluster access. The Scaleway kubeconfig endpoint is not used: it returns the legacy admin token, which outlives the key.
@@ -437,13 +436,12 @@ Every green push to `main` deploys to `https://storefront.tony-engineering.com`.
 on:
   workflow_dispatch:
     inputs:
-      vus:      { description: "Virtual users", default: "50" }
-      duration: { description: "Duration",      default: "2m" }
+      test: { type: choice, default: flash-sale, options: [steady, flash-sale, ramp, outage, slow-provider, retry-storm] }
 ```
 
 - A **separate workflow** triggered only with `workflow_dispatch`, so it can never block or slow the CI pipeline on push.
-- Steps: start the stack with `docker compose up -d --build` → wait for `/health` → run k6 with the given inputs → upload the k6 summary as an artifact → `docker compose down`.
-- Failing thresholds mark the load-test run red without affecting CI status.
+- Steps: start `api` and `loadlab` with `docker compose up -d --build` → wait for both health checks → `POST /api/lab/runs` → poll the run until it is `Done` or `Failed` → upload the run JSON as an artifact → `docker compose down`.
+- The run fails if the load generator reports `Failed` or any audit check fails. This does not affect CI status.
 
 ### Trade-off of pushing to `main`
 
@@ -507,3 +505,35 @@ The `integration-tests` service sits under a `tests` Compose profile, so `docker
 | Push to `main` | Broken commits can land | PRs + branch protection |
 | — | No observability | Structured logging, OpenTelemetry traces, alerting on `NeedsAttention` orders |
 | — | No abuse protection | Rate limiting on order creation; idempotency record expiry |
+
+## 17. The Lab: load testing
+
+The Lab page (`/lab`, next to Admin in the nav) lets any visitor start a load test from a fixed list and watch the store cope.
+
+```
+Browser ──/api/lab/*──▶ loadlab (.NET, 1 replica)
+   │                        │  sends orders with header X-Lab-Run: <runId>
+   │                        ▼
+   └──────/api/*────────▶ api ──▶ Postgres
+                            ▲
+loadlab polls GET /api/admin/lab/runs/{runId}/order-stats every second
+```
+
+- **Load generator** (`backend/src/Storefront.LoadLab`). Endpoints under `/api/lab`: `GET /tests`, `GET /status?after=n&run=id`, `POST /runs {testId}` (202, 409 while another test runs, 429 + `Retry-After` during the 10 s cooldown, 404 unknown test), `GET /runs/{id}`, `GET /health`. Visitors pick a test ID and never send numbers. It must run as **one replica**: the lock, the cooldown and the samples are in memory. `LoadLab:Enabled=false` (Helm: `loadlab.enabled=false`) turns it off.
+- **Three phases.** *Initializing* (API healthy, product IDs loaded), *Sending* (a 50 ms tick starts the requests that are due without waiting for replies; like a browser, a request that gets no answer, a 5xx or a 409 is retried with the same key (after `Retry-After` for a 409, else after 1 s) for up to 90 s, then it gives up and the audit says so), *Finalizing* (wait until no order is `Pending`, `PaymentRetrying` or `PaymentUnknown`, at most 4 min, then audit).
+- **One source of truth for the charts.** The generator takes one sample per second (its own numbers plus the API's order counts by status) and keeps the run in memory, so everyone sees the same run, including someone who arrives mid-run. The page polls every second during a run and every 5 s otherwise, fetching only samples it has not seen.
+- **Tagged orders.** `POST /api/orders` accepts an optional `X-Lab-Run` header, stored as `Orders.LabRunId` (nullable, indexed; the migration only adds a column). The idempotency hash still covers the body only. Anyone can send the header; the only effect is that the order is counted in lab stats and deleted after 24 h.
+- **Janitor.** `LabOrderJanitor` deletes lab orders (and their idempotency records) older than `Lab:RetainFor` (24 h) once an hour. Lines and payment attempts follow by cascade.
+- **Simulated payment delay.** A mock token may end in `@min-max` or `@ms`, e.g. `tok_success@300-800`. For success, timeout and flaky tokens the money is taken first and the delay runs after, so a delay beyond the 3 s gateway timeout produces a real "timed out but charged" order. Status lookups have no delay. A malformed suffix is an unknown token. The cap is 10 s.
+
+| Test | Shape | Mix | Delay | What to expect |
+|---|---|---|---|---|
+| `steady` | 600 orders, 10/s for 60 s | 85% ok, 10% decline, 5% timeout | 200–800 ms | Mostly `Paid`; `Unknown` turns into `Paid` |
+| `flash-sale` | 300 at once | 100% ok | 300–600 ms | p95 jumps, all `Paid`, no 5xx |
+| `ramp` | about 2,500, 2 → 40/s over 2 min | 90% ok, 10% decline | 200–800 ms | Shows where latency bends |
+| `outage` | 200, 5/s for 40 s | 100% unavailable | 50 ms | `Retrying`, then `Unavailable` at about 62 s; nobody charged |
+| `slow-provider` | 300, 5/s for 60 s | 100% ok | 2–4 s | About half `Unknown`, then `Paid` |
+| `restart-api` | 600 orders, 10/s for 60 s | 100% ok | 200–800 ms | Restart the API by hand while it runs: every order still ends `Paid` |
+| `retry-storm` | 400 requests, 20 keys, at once | 100% ok | 500 ms | Exactly 20 orders |
+
+Sized for production (one API replica, 50m CPU). **Risks:** `ramp` slows real shoppers while it runs; the lock and cooldown cap the damage. The reconciler handles at most 50 attempts per 5 s, one after another (about 10/s), so `outage` and `slow-provider` show a backlog while Finalizing. That is a finding the Lab shows, not something it fixes.

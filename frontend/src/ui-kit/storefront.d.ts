@@ -14,6 +14,8 @@ export type OrderStatus =
 
 export interface StatusMeta {
     readonly label: string;
+    /** Chart colour, a CSS value such as `var(--sf-status-paid)`. */
+    readonly color: string;
     readonly tone: Tone;
     readonly message: string;
 }
@@ -22,6 +24,9 @@ export declare function formatMoney(minorUnits: number, currency?: string, local
 
 export declare const ORDER_STATUS: Readonly<Record<OrderStatus, StatusMeta>>;
 export declare function orderStatus(status: OrderStatus | (string & {})): StatusMeta;
+
+/** Chart colour of a status; neutral grey for an unknown one. */
+export declare function orderStatusColor(status: OrderStatus | (string & {})): string;
 
 export declare function openModal(target: string | HTMLDialogElement): HTMLDialogElement;
 export declare function closeModal(target: string | HTMLDialogElement, returnValue?: string): void;

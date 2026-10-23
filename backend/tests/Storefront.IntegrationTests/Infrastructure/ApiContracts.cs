@@ -60,3 +60,5 @@ public static class FailureReasons
     public const string ProviderUnavailable = "payment_provider_unavailable";
     public const string NotProcessed = "payment_not_processed";
 }
+
+public sealed record LabOrderStats(int Total, Dictionary<string, int> ByStatus);

@@ -156,3 +156,49 @@ I asked the AI for a plan to deploy automatically when all the CI tests pass, to
   - The cluster is too small for another app: add nodes or raise memory requests so the autoscaler can see the real load. One node (`e6e101`) still has a nearly full disk and should be replaced.
   - Not yet done: require SHA-pinned actions in the repo settings, and turn on secret scanning and push protection when the repo goes public. Branch rules for the `production` environment may not be enforced on a private repo on the Free plan.
   - The AI did not check the live site after the last run; I opened it myself and it worked.
+
+### Load testing plan: the Lab page
+
+I asked the AI for a protocol to test many simultaneous orders, then for a plan for a "Lab" page where visitors can start load tests and watch the system react. Planning only: no code was written.
+
+- **Protocol first, from the code:** the AI read `ARCHITECTURE.md` (it already planned k6 scenarios, but the `load-test.yml` workflow pointed at a script that was never written) and the mock gateway. It proposed sending orders at a fixed rate rather than with a fixed number of users, because a slow server then receives fewer requests and the slowdown is hidden. The phases: warm-up, baseline, ramp to the breaking point, a spike of simultaneous orders, a retry storm on shared keys, and a soak. It added a database audit after each run (one order per key, nothing stuck `Pending`, every `tok_success` order `Paid`), since latency alone proves nothing about correctness.
+- **Key finding:** the mock gateway answers `tok_success` instantly, so a load test would only measure Postgres. The AI suggested simulating payment latency, and I agreed. It also predicted the first limits: the 100-connection Npgsql pool, several database writes per order, 3-second timeouts holding requests open, and the mock's in-memory dictionaries growing toward the pod's 384 Mi limit.
+- **The Lab page I asked for:** a section next to Admin with a chart of order states over time, buttons to start tests, a progress bar (initializing, sending, finalizing), one test at a time, and a separate load-test container with its own API so any visitor can trigger a test. Each test describes its context, number of requests, simulated statuses and latency.
+- **The plan:**
+  - A small .NET service (`Storefront.LoadLab`) sends the orders and takes one sample per second, so every visitor sees the same run.
+  - Lab orders carry an `X-Lab-Run` header, stored in a new nullable column. The migration only adds, so it works with the previous app version.
+  - A stats endpoint counts lab orders by status, and a background job deletes lab orders after 24 h so the production database does not grow.
+  - The payment delay goes in the token (`tok_success@300-800`). The mock takes the money before the delay, so a delay longer than the 3-second gateway timeout gives a real "timed out but charged" case.
+  - Six fixed tests: steady, flash sale, ramp, provider outage, slow provider, retry storm.
+  - Guardrails for a public trigger: visitors pick a test ID and never send numbers; one run at a time on a single replica; a 60-second cooldown; a switch to turn the lab off.
+- **My decisions:** drop k6 completely and use only .NET, so the Lab page and the GitHub workflow share one load generator. Update the UI kit first: the progress bar, stepper, chart frame, legend, KPI tiles, audit checklist and one color per order status become `sf-*` components, so the page does not get one-off styles.
+- **What I corrected:** after I approved the first plan, the AI started reading code to implement it. I stopped it to add the two decisions above, then stopped it again to get the updated plan as text without implementation.
+- **Found while updating the plan:** the reconciler handles at most 50 payment attempts per 5-second pass, one after another, so about 10 per second. The outage and slow-provider tests will show a backlog. I keep that as something the Lab should show, not something to fix now. There is no .NET SDK on my Mac, so builds, tests and the migration will run in Docker.
+- **Open points:** nothing is implemented yet. The production API is small (one replica, 50m CPU), so the ramp test will slow real shoppers while it runs. Anyone can send `X-Lab-Run`; the only effect is that the order is counted in lab stats and deleted after 24 h.
+
+### Lab implementation: a separate session with a cheaper model
+
+I ran the implementation of the Lab plan in a separate session, using another model that costs less. The plan named every file, endpoint, test and check, so that session could follow it without redoing the design. I wrote this entry afterwards, from the code changes and the test result files.
+
+- **API:**
+  - The payment delay token (`MockToken.cs`, for example `tok_success@300-800`).
+  - The mock gateway rewritten around one dictionary entry per payment attempt, with `TimeProvider` and a cleanup of old entries.
+  - The `X-Lab-Run` tag, with the `AddOrderLabRunId` migration (nullable column plus index, add only).
+  - The `order-stats` endpoint, and `LabOrderJanitor`, which deletes lab orders after 24 h.
+- **Load generator:** `Storefront.LoadLab`, a .NET minimal API under `/api/lab`. It holds the test catalog, the one-run lock and cooldown, the three phases, one sample per second and the audit.
+- **UI kit:** new `sf-*` components (progress bar, stepper, KPI tiles, chart frame, legend, audit checklist, spec list, card grid), `--sf-status-*` colors, and `orderStatusColor()` so charts and badges match. All are shown in `demo.html`.
+- **Lab page:** `/lab`, next to Admin. It has test cards, the stepper and progress bar, a stacked-area chart of orders by status, a requests and p95 latency chart, KPI tiles and the audit. The charts are plain SVG, with no new dependency.
+- **Wiring:**
+  - `loadlab` service in Docker Compose, with an nginx route.
+  - Helm `loadlab.yaml`, plus an `/api/lab` ingress path.
+  - `ci.yml` builds and pushes the new image.
+  - `load-test.yml` no longer uses k6: it takes a test name, starts a run and fails if the audit fails.
+  - `ARCHITECTURE.md` has a new §17, and §12/§13 no longer mention k6.
+- **Changes from the plan:**
+  - The cooldown is 10 s, not 60 s.
+  - A seventh test, `restart-api`: restart the API by hand during the run, and every order should still end `Paid`.
+  - The load generator retries like a browser. With no answer, a 5xx or a 409, it resends with the same key for up to 90 s, then gives up and the audit reports it.
+  - The load generator asks for 50m CPU, not 100m.
+- **Size:** 30 files changed (about 800 lines) and about 30 new files (about 3,000 lines, including a 313-line generated migration file).
+- **Checks recorded on disk:** unit tests passed 173 of 173, and integration tests passed 50 of 50, both run in Docker. Some load generator settings changed after the last unit-test run.
+- **Not checked:** no frontend test results or browser check are recorded, so I still have to run `npm run test:ci` and try a test on `/lab`. Nothing is committed or deployed yet.

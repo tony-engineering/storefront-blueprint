@@ -77,6 +77,7 @@ Open `/demo.html`. Opening the file directly also works for the styles, but brow
 | Status | `sf-badge` + `-sale` / `-new` / `-success` / `-warning` / `-danger` / `-info` / `-default`; `sf-alert` + `-success` / `-warning` / `-danger` / `-info` |
 | Cart, admin, order lines | `sf-panel` (`-head`, `-body`, `-foot`), `sf-table-scroll`, `sf-table` (`is-num`, `is-actions`), `sf-prod-cell`, `sf-prod-thumb`, `sf-summary`, `sf-summary-row`, `sf-summary-total` |
 | Order details | `sf-timeline`, `sf-timeline-item` (`is-done` / `is-current` / `is-failed`) |
+| Load testing | `sf-progress` (`--sf-progress`, `is-indeterminate`, `-success` / `-warning` / `-danger`), `sf-stepper` + `sf-step` (`is-done` / `is-current` / `is-failed`), `sf-stat-grid` + `sf-stat` (`-label` / `-value` / `-hint`), `sf-chart` (`-svg`, `-grid`, `-axis`, `-tooltip`), `sf-legend` (`-item`, `-swatch`), `sf-checklist` + `sf-check` (`is-pass` / `is-fail`), `sf-spec-list`, `sf-card-grid`; status colours `--sf-status-*` |
 | Dialogs | `<dialog class="sf-modal">` with `sf-modal-head`, `-body`, `-foot` |
 | Misc | `sf-empty`, `sf-footer`, `sf-logo`, `sf-divider`, `sf-visually-hidden`, `sf-text-*` utilities |
 
@@ -86,6 +87,7 @@ Open `/demo.html`. Opening the file directly also works for the styles, but brow
 |---|---|
 | `formatMoney(minorUnits, currency?, locale?)` | Formats integer pence as `£38,500.00`. Throws on non-integers to catch a pounds/pence mix-up early. |
 | `ORDER_STATUS`, `orderStatus(status)` | Label, tone and customer message for `Pending`, `Paid`, `PaymentFailed`, `PaymentRetrying`, `PaymentUnavailable`, `PaymentUnknown`, `NeedsAttention`. Unknown statuses fall back to a neutral badge. |
+| `orderStatusColor(status)` | The status's chart colour as a CSS value (`var(--sf-status-paid)`), so charts and badges match. |
 | `openModal`, `closeModal`, `confirmModal` | Native `<dialog>`. `await confirmModal('id')` resolves with the clicked button's `value`. |
 | `toast(message, { tone, duration })` | Live-region notification. Text is set with `textContent`, so API messages are safe to pass in. |
 | `setBusy`, `withBusy` | Disables a button and shows a spinner while a request runs, to prevent double submits. |

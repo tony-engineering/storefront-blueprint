@@ -1,0 +1,181 @@
+<section class="sf-section">
+  <div class="sf-container sf-stack">
+    <div class="sf-section-head" style="margin-bottom: 0">
+      <div>
+        <span class="sf-eyebrow">Lab</span>
+        <h1>Load testing</h1>
+      </div>
+      <p>
+        Send a burst of orders to this store and watch what happens. The payment provider is
+        simulated, so no money moves. Only one test runs at a time.
+      </p>
+    </div>
+
+    @if (!enabled()) {
+      <div class="sf-alert sf-alert-info" role="status">The lab is switched off on this site.</div>
+    }
+    @if (loadError(); as message) {
+      <div class="sf-alert sf-alert-danger" role="alert">{{ message }}</div>
+    }
+    @if (startError(); as message) {
+      <div class="sf-alert sf-alert-warning" role="alert">{{ message }}</div>
+    }
+
+    <div class="sf-card-grid">
+      @for (test of tests(); track test.id) {
+        <section class="sf-panel">
+          <header class="sf-panel-head">
+            <h4>{{ test.title }}</h4>
+            <span class="sf-badge sf-badge-default">{{ test.requests }} orders</span>
+          </header>
+          <div class="sf-panel-body sf-stack">
+            <p>{{ test.context }}</p>
+            <dl class="sf-spec-list">
+              <div>
+                <dt>Shape</dt>
+                <dd>{{ test.shape }}</dd>
+              </div>
+              <div>
+                <dt>Mix</dt>
+                <dd>{{ test.mix }}</dd>
+              </div>
+              <div>
+                <dt>Delay</dt>
+                <dd>{{ test.delay }}</dd>
+              </div>
+              <div>
+                <dt>Expect</dt>
+                <dd>{{ test.expected }}</dd>
+              </div>
+            </dl>
+          </div>
+          <footer class="sf-panel-foot">
+            @if (blockedReason(); as reason) {
+              <span class="sf-field-hint" [id]="'why-' + test.id">{{ reason }}</span>
+            }
+            <button
+              type="button"
+              class="sf-btn sf-btn-primary sf-btn-sm"
+              [class.is-loading]="starting() === test.id"
+              [disabled]="blockedReason() !== null || starting() !== null"
+              [attr.aria-describedby]="blockedReason() ? 'why-' + test.id : null"
+              (click)="start(test)"
+            >
+              Run
+            </button>
+          </footer>
+        </section>
+      }
+    </div>
+
+    @if (run(); as run) {
+      <section class="sf-panel" aria-live="polite">
+        <header class="sf-panel-head">
+          <h4>{{ currentTest()?.title ?? run.testId }}</h4>
+          <span
+            class="sf-badge"
+            [class.sf-badge-info]="run.phase !== 'Done' && run.phase !== 'Failed'"
+            [class.sf-badge-success]="run.phase === 'Done' && allPassed()"
+            [class.sf-badge-danger]="
+              run.phase === 'Failed' || (run.phase === 'Done' && !allPassed())
+            "
+          >
+            {{
+              run.phase === 'Done' ? (allPassed() ? 'Passed' : 'Finished with failures') : run.phase
+            }}
+          </span>
+        </header>
+        <div class="sf-panel-body sf-stack">
+          <ol class="sf-stepper" aria-label="Run progress">
+            @for (step of steps(); track step.phase) {
+              <li
+                class="sf-step"
+                [class.is-done]="step.state === 'done'"
+                [class.is-current]="step.state === 'current'"
+                [class.is-failed]="step.state === 'failed'"
+                [attr.aria-current]="step.state === 'current' ? 'step' : null"
+              >
+                <span class="sf-step-dot">{{ step.number }}</span>
+                <span class="sf-step-label">{{ step.phase }}</span>
+              </li>
+            }
+          </ol>
+
+          <div
+            class="sf-progress"
+            role="progressbar"
+            aria-label="Progress of the current step"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            [class.is-indeterminate]="run.phase === 'Initializing'"
+            [class.sf-progress-success]="progressTone() === 'success'"
+            [class.sf-progress-danger]="progressTone() === 'danger'"
+            [attr.aria-valuenow]="run.phase === 'Initializing' ? null : run.percent"
+            [style.--sf-progress.%]="run.percent"
+          ></div>
+
+          @if (run.error; as error) {
+            <div class="sf-alert sf-alert-danger" role="alert">The run failed: {{ error }}</div>
+          }
+
+          <div class="sf-stat-grid">
+            <div class="sf-stat">
+              <span class="sf-stat-label">Sent</span>
+              <span class="sf-stat-value">{{ latest()?.sent ?? 0 }}</span>
+              <span class="sf-stat-hint">of {{ currentTest()?.requests ?? '?' }}</span>
+            </div>
+            <div class="sf-stat">
+              <span class="sf-stat-label">Orders</span>
+              <span class="sf-stat-value">{{ latest()?.ordersTotal ?? 0 }}</span>
+              <span class="sf-stat-hint">created</span>
+            </div>
+            <div class="sf-stat">
+              <span class="sf-stat-label">p95 peak</span>
+              <span class="sf-stat-value">{{ peakP95() }} ms</span>
+              <span class="sf-stat-hint">now {{ latest()?.p95 ?? 0 }} ms</span>
+            </div>
+            <div class="sf-stat">
+              <span class="sf-stat-label">In flight</span>
+              <span class="sf-stat-value">{{ latest()?.inFlight ?? 0 }}</span>
+            </div>
+            <div class="sf-stat">
+              <span class="sf-stat-label">Errors</span>
+              <span class="sf-stat-value">{{ latest()?.errors ?? 0 }}</span>
+            </div>
+          </div>
+
+          <div class="sf-card-grid">
+            <app-status-chart [samples]="samples()" />
+            <app-latency-chart [samples]="samples()" />
+          </div>
+
+          @if (run.audit.length > 0) {
+            <div class="sf-stack">
+              <h5>Audit</h5>
+              <ul class="sf-checklist">
+                @for (check of run.audit; track check.id) {
+                  <li
+                    class="sf-check"
+                    [class.is-pass]="check.result === 'pass'"
+                    [class.is-fail]="check.result === 'fail'"
+                  >
+                    <span class="sf-check-mark" aria-hidden="true"></span>
+                    <span class="sf-check-body">
+                      <span
+                        >{{ check.label }}
+                        <span class="sf-visually-hidden">{{
+                          check.result === 'pass' ? '(passed)' : '(failed)'
+                        }}</span></span
+                      >
+                      <span class="sf-check-detail">{{ check.detail }}</span>
+                    </span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      </section>
+    }
+  </div>
+</section>

@@ -19,15 +19,23 @@ public sealed class StorefrontClient(HttpClient http)
 
     /// <summary>POST /api/orders with a fresh Idempotency-Key unless one is given.</summary>
     public async Task<ApiResponse<OrderDto>> PlaceOrderAsync(
-        CreateOrderRequest request, CancellationToken ct, Guid? idempotencyKey = null)
+        CreateOrderRequest request, CancellationToken ct, Guid? idempotencyKey = null, Guid? labRun = null)
     {
         var message = new HttpRequestMessage(HttpMethod.Post, "/api/orders")
         {
             Content = JsonContent.Create(request, options: Json),
         };
         message.Headers.Add("Idempotency-Key", (idempotencyKey ?? Guid.NewGuid()).ToString());
+        if (labRun is not null)
+        {
+            message.Headers.Add("X-Lab-Run", labRun.Value.ToString());
+        }
+
         return await SendAsync<OrderDto>(message, ct);
     }
+
+    public async Task<ApiResponse<LabOrderStats>> GetLabStatsAsync(Guid runId, CancellationToken ct) =>
+        await SendAsync<LabOrderStats>(new HttpRequestMessage(HttpMethod.Get, $"/api/admin/lab/runs/{runId}/order-stats"), ct);
 
     /// <summary>POST /api/orders/{id}/payments: pay an existing order again, e.g. with another card.</summary>
     public async Task<ApiResponse<OrderDto>> RetryPaymentAsync(

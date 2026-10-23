@@ -35,3 +35,14 @@ web:
       memory: 32Mi
     limits:
       memory: 64Mi
+
+# The load generator behind the Lab page (ARCHITECTURE.md §17). Off: /api/lab then goes to the API and answers 404.
+# Keep it at one replica; its lock is in memory.
+loadlab:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi

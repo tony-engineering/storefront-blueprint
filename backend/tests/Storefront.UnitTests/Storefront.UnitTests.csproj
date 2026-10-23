@@ -13,6 +13,7 @@
 
   <!-- Keep versions in step with Storefront.IntegrationTests. -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -20,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Storefront.Api\Storefront.Api.csproj" />
+    <ProjectReference Include="..\..\src\Storefront.LoadLab\Storefront.LoadLab.csproj" />
   </ItemGroup>
 
 </Project>

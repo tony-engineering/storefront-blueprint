@@ -31,6 +31,18 @@ services:
       db:
         condition: service_healthy
 
+  # Load generator behind the Lab page (ARCHITECTURE.md §14). One replica: its run lock lives in memory.
+  loadlab:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.loadlab
+    environment:
+      LoadLab__ApiBaseUrl: http://api:8080
+    ports:
+      - "8081:8080"
+    depends_on:
+      - api
+
   # Angular storefront: built in a Node stage, served by nginx (frontend/Dockerfile).
   # nginx forwards /api to the api service, so the browser sees one origin and needs no CORS.
   web:
@@ -39,6 +51,7 @@ services:
       - "4200:80"
     depends_on:
       - api                            # so `docker compose up web` starts the whole stack
+      - loadlab
 
   # Only runs when asked: docker compose run --rm unit-tests [extra dotnet test args]
   #

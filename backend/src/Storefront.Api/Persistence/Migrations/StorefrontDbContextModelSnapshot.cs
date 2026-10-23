@@ -36,6 +36,9 @@ namespace Storefront.Api.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<Guid?>("LabRunId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -67,6 +70,9 @@ namespace Storefront.Api.Persistence.Migrations
                         });
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LabRunId")
+                        .HasFilter("\"LabRunId\" IS NOT NULL");
 
                     b.HasIndex("Status");
 

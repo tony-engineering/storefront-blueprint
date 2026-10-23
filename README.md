@@ -22,6 +22,7 @@ docker compose up --build web
 | API | http://localhost:8080 |
 | Swagger UI | http://localhost:8080/swagger |
 | Health check | http://localhost:8080/health |
+| Lab (load testing) | http://localhost:4200/lab (load generator on http://localhost:8081) |
 
 Run the tests (on demand, nothing .NET is installed on the host):
 

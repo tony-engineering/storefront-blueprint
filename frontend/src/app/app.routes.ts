@@ -29,5 +29,10 @@ export const routes: Routes = [
       import('./features/admin/products/admin-products').then((m) => m.AdminProducts),
     title: 'Admin: products · Tiny Haven',
   },
+  {
+    path: 'lab',
+    loadComponent: () => import('./features/lab/lab-page').then((m) => m.LabPage),
+    title: 'Lab · Tiny Haven',
+  },
   { path: '**', redirectTo: '' },
 ];

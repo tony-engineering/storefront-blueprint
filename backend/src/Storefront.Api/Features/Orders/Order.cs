@@ -56,6 +56,9 @@ public sealed class Order
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>The load-test run that placed this order (<c>X-Lab-Run</c> header); null for a real order.</summary>
+    public Guid? LabRunId { get; private set; }
+
     /// <summary>
     /// Optimistic concurrency token, mapped to PostgreSQL's <c>xmin</c> system column. If two writers
     /// change the same order, the second save fails instead of silently overwriting the first.
@@ -75,7 +78,7 @@ public sealed class Order
     /// or with the same product twice, and <see cref="CurrencyMismatchException"/> when lines are priced in
     /// different currencies. <paramref name="id"/> is for seed data that needs a well-known ID; leave it out otherwise.
     /// </summary>
-    public static Order Create(IReadOnlyList<OrderLine> lines, DateTimeOffset now, Guid? id = null)
+    public static Order Create(IReadOnlyList<OrderLine> lines, DateTimeOffset now, Guid? id = null, Guid? labRunId = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
         if (lines.Count == 0)
@@ -97,6 +100,7 @@ public sealed class Order
             Total = total,
             CreatedAt = now,
             UpdatedAt = now,
+            LabRunId = labRunId,
         };
 
         for (var position = 0; position < lines.Count; position++)

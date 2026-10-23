@@ -63,6 +63,7 @@ public static class OrderEndpoints
 
     private static async Task<IResult> CreateOrderAsync(
         [FromHeader(Name = "Idempotency-Key"), Description(IdempotencyKeyDescription)] string? idempotencyKey,
+        [FromHeader(Name = "X-Lab-Run"), Description("Set by the load generator to tag its orders; ignored if not a UUID.")] string? labRun,
         CreateOrderRequest request,
         IValidator<CreateOrderRequest> validator,
         IdempotencyExecutor idempotency,
@@ -77,7 +78,7 @@ public static class OrderEndpoints
         return await idempotency.ExecuteAsync(
             idempotencyKey,
             RequestHasher.Hash(request),
-            record => service.CreateAsync(request, record, cancellationToken),
+            record => service.CreateAsync(request, record, cancellationToken, Guid.TryParse(labRun, out var runId) ? runId : null),
             service.DescribeAsync,
             cancellationToken);
     }
@@ -130,5 +131,6 @@ internal static class PaymentTokens
 {
     public const string Description =
         "Mock card token that picks the payment outcome: tok_success, tok_decline, tok_timeout, " +
-        "tok_error, tok_unavailable or tok_flaky. See the API description for what each one does.";
+        "tok_error, tok_unavailable or tok_flaky. See the API description for what each one does. " +
+        "Add @min-max (or @ms) to simulate a slow provider, e.g. tok_success@300-800; at most 10 s.";
 }

@@ -1,4 +1,5 @@
-# One host, same origin for the browser: /api goes to the API, everything else to the web app.
+# One host, same origin for the browser: /api goes to the API (/api/lab to the load generator),
+# everything else to the web app.
 # external-dns creates the DNS record; cert-manager gets the TLS certificate.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -17,6 +18,13 @@ spec:
     - host: {{ .Values.host }}
       http:
         paths:
+          {{- if .Values.loadlab.enabled }}
+          # Longer prefix wins: the Lab page's load generator.
+          - path: /api/lab
+            pathType: Prefix
+            backend:
+              service: { name: loadlab, port: { name: http } }
+          {{- end }}
           - path: /api
             pathType: Prefix
             backend:

@@ -472,6 +472,63 @@
                 </section>
             </div>
 
+            <!-- Load testing -->
+            <div class="demo-block" id="load-testing">
+                <h3>Load testing</h3>
+                <p class="demo-note">Progress bar, stepper, KPI tiles, chart frame, legend, audit checklist and spec list: the pieces of the Lab page. Status colours are shared with the order badges.</p>
+                <section class="sf-panel">
+                    <header class="sf-panel-head"><h4>Flash sale</h4><span class="sf-badge sf-badge-info">Sending</span></header>
+                    <div class="sf-panel-body sf-stack">
+                        <ol class="sf-stepper" aria-label="Run progress">
+                            <li class="sf-step is-done"><span class="sf-step-dot">1</span><span class="sf-step-label">Initializing</span></li>
+                            <li class="sf-step is-current" aria-current="step"><span class="sf-step-dot">2</span><span class="sf-step-label">Sending</span></li>
+                            <li class="sf-step"><span class="sf-step-dot">3</span><span class="sf-step-label">Finalizing</span></li>
+                        </ol>
+                        <div class="sf-progress" role="progressbar" aria-label="Sending" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" style="--sf-progress: 62%"></div>
+                        <div class="sf-progress sf-progress-success" role="progressbar" aria-label="Done" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" style="--sf-progress: 100%"></div>
+                        <div class="sf-progress is-indeterminate" role="progressbar" aria-label="Working"></div>
+                        <div class="sf-stat-grid">
+                            <div class="sf-stat"><span class="sf-stat-label">Sent</span><span class="sf-stat-value">186</span><span class="sf-stat-hint">of 300</span></div>
+                            <div class="sf-stat"><span class="sf-stat-label">p95</span><span class="sf-stat-value">840 ms</span><span class="sf-stat-hint">p50 310 ms</span></div>
+                            <div class="sf-stat"><span class="sf-stat-label">In flight</span><span class="sf-stat-value">42</span></div>
+                            <div class="sf-stat"><span class="sf-stat-label">Errors</span><span class="sf-stat-value">0</span></div>
+                        </div>
+                        <figure class="sf-chart">
+                            <figcaption>Orders by status</figcaption>
+                            <svg class="sf-chart-svg" viewBox="0 0 600 160" role="img" aria-label="Stacked area of orders by status over time">
+                                <g class="sf-chart-grid"><line x1="40" x2="590" y1="20" y2="20"/><line x1="40" x2="590" y1="70" y2="70"/><line x1="40" x2="590" y1="120" y2="120"/></g>
+                                <path d="M40 120 L200 100 L360 60 L590 30 L590 120 Z" fill="var(--sf-status-paid)"/>
+                                <path d="M40 120 L200 100 L360 60 L590 30 L590 20 L360 20 L200 70 L40 120 Z" fill="var(--sf-status-unknown)"/>
+                                <g class="sf-chart-axis"><text x="34" y="124" text-anchor="end">0</text><text x="34" y="24" text-anchor="end">300</text><text x="40" y="145">0 s</text><text x="590" y="145" text-anchor="end">60 s</text></g>
+                            </svg>
+                            <ul class="sf-legend">
+                                <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-paid)"></span>Paid</li>
+                                <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-unknown)"></span>Confirming payment</li>
+                            </ul>
+                        </figure>
+                        <ul class="sf-checklist">
+                            <li class="sf-check is-pass"><span class="sf-check-mark"></span><span class="sf-check-body">One order ID per key<span class="sf-check-detail">20 keys, one order each</span></span></li>
+                            <li class="sf-check is-fail"><span class="sf-check-mark"></span><span class="sf-check-body">No order left Pending<span class="sf-check-detail">3 still unsettled</span></span></li>
+                            <li class="sf-check is-pending"><span class="sf-check-mark"></span><span class="sf-check-body">No server errors</span></li>
+                        </ul>
+                        <dl class="sf-spec-list">
+                            <div><dt>Shape</dt><dd>300 orders at once</dd></div>
+                            <div><dt>Mix</dt><dd>100% ok</dd></div>
+                            <div><dt>Delay</dt><dd>300–600 ms</dd></div>
+                        </dl>
+                    </div>
+                </section>
+                <ul class="sf-legend">
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-paid)"></span>Paid</li>
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-pending)"></span>Processing</li>
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-retrying)"></span>Retrying</li>
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-unknown)"></span>Confirming</li>
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-failed)"></span>Declined</li>
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-unavailable)"></span>Unavailable</li>
+                    <li class="sf-legend-item"><span class="sf-legend-swatch" style="--sf-swatch: var(--sf-status-attention)"></span>Needs attention</li>
+                </ul>
+            </div>
+
             <!-- Empty state -->
             <div class="demo-block">
                 <h3>Empty state</h3>

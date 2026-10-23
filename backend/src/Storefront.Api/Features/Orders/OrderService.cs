@@ -51,7 +51,7 @@ public sealed class OrderService(
 
     /// <summary>Prices the basket on the server, saves the order, then makes one payment attempt.</summary>
     public async Task<StoredResponse> CreateAsync(
-        CreateOrderRequest request, IdempotencyRecord record, CancellationToken cancellationToken)
+        CreateOrderRequest request, IdempotencyRecord record, CancellationToken cancellationToken, Guid? labRunId = null)
     {
         var now = clock.GetUtcNow();
 
@@ -80,7 +80,7 @@ public sealed class OrderService(
             var lines = request.Lines
                 .Select(l => new OrderLine(l.ProductId, products[l.ProductId].Name, products[l.ProductId].Price, l.Quantity))
                 .ToList();
-            order = Order.Create(lines, now);
+            order = Order.Create(lines, now, labRunId: labRunId);
         }
         catch (OverflowException)
         {

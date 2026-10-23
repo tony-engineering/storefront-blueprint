@@ -56,41 +56,49 @@ export function formatMoney(minorUnits, currency = 'GBP', locale = 'en-GB') {
 /**
  * Display metadata for each order status the API returns. Mirrors the order
  * state machine in ARCHITECTURE.md. `tone` maps straight onto the kit's
- * classes: `sf-badge-${tone}`, `sf-alert-${tone}`, toast({ tone }).
+ * classes: `sf-badge-${tone}`, `sf-alert-${tone}`, toast({ tone }). `color` is
+ * the status's chart colour (a CSS variable), so badges and charts agree.
  */
 export const ORDER_STATUS = Object.freeze({
     Pending: Object.freeze({
         label: 'Processing',
+        color: 'var(--sf-status-pending)',
         tone: 'info',
         message: 'We are processing your payment.',
     }),
     Paid: Object.freeze({
         label: 'Paid',
+        color: 'var(--sf-status-paid)',
         tone: 'success',
         message: 'Payment received. Your order is confirmed.',
     }),
     PaymentFailed: Object.freeze({
         label: 'Payment declined',
+        color: 'var(--sf-status-failed)',
         tone: 'danger',
         message: 'Your payment was declined and nothing was charged. Please try another card.',
     }),
     PaymentRetrying: Object.freeze({
         label: 'Retrying payment',
+        color: 'var(--sf-status-retrying)',
         tone: 'warning',
         message: 'The payment provider is not responding. We have not charged you and are retrying automatically; this page updates by itself.',
     }),
     PaymentUnavailable: Object.freeze({
         label: 'Payment unavailable',
+        color: 'var(--sf-status-unavailable)',
         tone: 'danger',
         message: 'The payment provider is not available at the moment. You have not been charged. Please try again later.',
     }),
     PaymentUnknown: Object.freeze({
         label: 'Confirming payment',
+        color: 'var(--sf-status-unknown)',
         tone: 'warning',
         message: 'We are confirming your payment with the bank. Do not pay again; this page updates automatically.',
     }),
     NeedsAttention: Object.freeze({
         label: 'Needs attention',
+        color: 'var(--sf-status-attention)',
         tone: 'danger',
         message: 'We could not confirm your payment. Our team will contact you. Please do not pay again.',
     }),
@@ -102,12 +110,23 @@ export const ORDER_STATUS = Object.freeze({
  * instead of throwing.
  *
  * @param {string} status
- * @returns {{label: string, tone: 'success'|'warning'|'danger'|'info', message: string}}
+ * @returns {{label: string, color: string, tone: 'success'|'warning'|'danger'|'info', message: string}}
  */
 export function orderStatus(status) {
     return Object.hasOwn(ORDER_STATUS, status)
         ? ORDER_STATUS[status]
-        : { label: String(status), tone: 'info', message: '' };
+        : { label: String(status), color: 'var(--sf-text-faint)', tone: 'info', message: '' };
+}
+
+/**
+ * The chart colour for a status, as a CSS value (`var(--sf-status-paid)`).
+ * Use it as an SVG `fill` or a legend swatch. Unknown statuses are neutral grey.
+ *
+ * @param {string} status
+ * @returns {string}
+ */
+export function orderStatusColor(status) {
+    return Object.hasOwn(ORDER_STATUS, status) ? ORDER_STATUS[status].color : 'var(--sf-text-faint)';
 }
 
 /* ------------------------------------------------------------------------ */

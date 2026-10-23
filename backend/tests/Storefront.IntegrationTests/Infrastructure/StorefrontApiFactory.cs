@@ -60,6 +60,7 @@ public sealed class StorefrontApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Database:SeedOnStartup", "true");
 
         builder.UseSetting("Payments:Reconciler:Enabled", "false");
+        builder.UseSetting("Lab:JanitorInterval", "00:00:00"); // tests call the janitor themselves
         builder.UseSetting("Payments:Retry:MaxChargeAttempts",
             RetryPolicy.MaxChargeAttempts.ToString(CultureInfo.InvariantCulture));
         builder.UseSetting("Payments:Retry:InitialDelay",

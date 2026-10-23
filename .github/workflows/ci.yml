@@ -141,6 +141,16 @@ jobs:
           cache-from: type=gha,scope=storefront-api
           cache-to: type=gha,scope=storefront-api,mode=max
 
+      - name: Build storefront-loadlab image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.loadlab
+          push: false
+          tags: storefront-loadlab:${{ github.sha }}
+          cache-from: type=gha,scope=storefront-loadlab
+          cache-to: type=gha,scope=storefront-loadlab,mode=max
+
   # The frontend is built once per run, here: the Dockerfile runs
   # `ng build --configuration production`, so AOT errors and bundle budgets fail this job.
   frontend-docker:
@@ -245,6 +255,16 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/storefront-api:${{ github.sha }}
           cache-from: type=gha,scope=storefront-api
+
+      - name: Push storefront-loadlab image
+        if: steps.tip.outputs.current == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.loadlab
+          push: true
+          tags: ${{ env.REGISTRY }}/storefront-loadlab:${{ github.sha }}
+          cache-from: type=gha,scope=storefront-loadlab
 
       - name: Push storefront-web image
         if: steps.tip.outputs.current == 'true'
