@@ -58,8 +58,20 @@ public static class OrderEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+        app.MapGet("/api/admin/orders/unpaid", ListUnpaidOrdersAsync)
+            .WithTags("Admin: orders")
+            .WithName("ListUnpaidOrders")
+            .WithSummary("List orders that are neither Pending nor Paid")
+            .WithDescription(
+                "Orders that need a look: payment failed, retrying, unknown or unavailable, or needing attention. " +
+                "Most recently updated first, at most 200.")
+            .Produces<IReadOnlyList<UnpaidOrderDto>>();
+
         return app;
     }
+
+    private static async Task<IResult> ListUnpaidOrdersAsync(OrderService service, CancellationToken cancellationToken) =>
+        TypedResults.Ok(await service.ListUnpaidAsync(cancellationToken));
 
     private static async Task<IResult> CreateOrderAsync(
         [FromHeader(Name = "Idempotency-Key"), Description(IdempotencyKeyDescription)] string? idempotencyKey,

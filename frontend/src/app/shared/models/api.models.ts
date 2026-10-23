@@ -44,6 +44,17 @@ export interface Order {
   payments: PaymentAttempt[];
 }
 
+/** One row of the admin unpaid-orders table: any order that is neither Pending nor Paid. */
+export interface UnpaidOrder {
+  id: string;
+  status: OrderStatus;
+  failureReason: string | null;
+  total: Money;
+  paymentAttempts: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OrderLineRequest {
   productId: string;
   quantity: number;

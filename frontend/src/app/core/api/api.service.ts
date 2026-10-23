@@ -6,6 +6,7 @@ import {
   Order,
   Product,
   RetryPaymentRequest,
+  UnpaidOrder,
 } from '../../shared/models/api.models';
 
 /** Thin typed wrapper over the Storefront API. `/api` is proxied by nginx (Docker) or the dev server. */
@@ -33,6 +34,10 @@ export class ApiService {
     return this.http.post<Order>(`/api/orders/${encodeURIComponent(orderId)}/payments`, body, {
       headers: { 'Idempotency-Key': idempotencyKey },
     });
+  }
+
+  listUnpaidOrders() {
+    return this.http.get<UnpaidOrder[]>('/api/admin/orders/unpaid');
   }
 
   createProduct(body: CreateProductRequest) {

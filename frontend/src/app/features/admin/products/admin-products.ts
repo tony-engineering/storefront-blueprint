@@ -6,12 +6,15 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../../../core/api/api.service';
 import { retryTransient } from '../../../core/http/idempotency';
 import { problemMessage } from '../../../core/http/problem';
-import { Product } from '../../../shared/models/api.models';
+import { Product, UnpaidOrder } from '../../../shared/models/api.models';
 import { parseMinorUnits } from '../../../shared/models/money';
+import { StatusBadge } from '../../../shared/components/status-badge/status-badge';
 import { MoneyPipe } from '../../../shared/pipes/money.pipe';
 
 const PRICE_PATTERN = /^\s*\d{1,9}(\.\d{1,2})?\s*$/;
@@ -19,7 +22,7 @@ const PRICE_PATTERN = /^\s*\d{1,9}(\.\d{1,2})?\s*$/;
 /** Create and delete products. Open by design: the API has no auth (ARCHITECTURE.md §9). */
 @Component({
   selector: 'app-admin-products',
-  imports: [ReactiveFormsModule, MoneyPipe],
+  imports: [ReactiveFormsModule, RouterLink, DatePipe, MoneyPipe, StatusBadge],
   templateUrl: './admin-products.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -30,6 +33,9 @@ export class AdminProducts {
 
   protected readonly products = signal<Product[] | null>(null);
   protected readonly listError = signal<string | null>(null);
+
+  protected readonly unpaid = signal<UnpaidOrder[] | null>(null);
+  protected readonly unpaidError = signal<string | null>(null);
 
   protected readonly form = inject(FormBuilder).nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -46,6 +52,18 @@ export class AdminProducts {
 
   constructor() {
     this.load();
+    this.loadUnpaid();
+  }
+
+  protected loadUnpaid(): void {
+    this.unpaidError.set(null);
+    this.api
+      .listUnpaidOrders()
+      .pipe(retryTransient())
+      .subscribe({
+        next: (orders) => this.unpaid.set(orders),
+        error: (err) => this.unpaidError.set(problemMessage(err)),
+      });
   }
 
   protected load(): void {

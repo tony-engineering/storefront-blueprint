@@ -33,6 +33,23 @@ public sealed class OrderService(
         return order is null ? null : OrderDto.From(order);
     }
 
+    /// <summary>Orders that are neither Pending nor Paid, most recently updated first.</summary>
+    public async Task<IReadOnlyList<UnpaidOrderDto>> ListUnpaidAsync(CancellationToken cancellationToken) =>
+        await db.Orders
+            .AsNoTracking()
+            .Where(o => o.Status != OrderStatus.Pending && o.Status != OrderStatus.Paid)
+            .OrderByDescending(o => o.UpdatedAt)
+            .Take(200)
+            .Select(o => new UnpaidOrderDto(
+                o.Id,
+                o.Status,
+                o.FailureReason,
+                new MoneyDto(o.Total.AmountMinor, o.Total.Currency),
+                o.Payments.Count,
+                o.CreatedAt,
+                o.UpdatedAt))
+            .ToListAsync(cancellationToken);
+
     public Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken) =>
         db.Orders.AsNoTracking().AnyAsync(o => o.Id == id, cancellationToken);
 

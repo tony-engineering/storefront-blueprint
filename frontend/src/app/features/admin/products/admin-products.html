@@ -141,6 +141,63 @@
         <div class="sf-panel-body"><p class="sf-text-muted" role="status">Loading…</p></div>
       }
     </section>
+
+    <section class="sf-panel">
+      <header class="sf-panel-head">
+        <h4>Unpaid orders tracking</h4>
+        @if (unpaid(); as orders) {
+          <span class="sf-badge sf-badge-default">{{ orders.length }} to follow up</span>
+        }
+      </header>
+
+      @if (unpaidError(); as message) {
+        <div class="sf-panel-body">
+          <div class="sf-alert sf-alert-danger" role="alert">
+            <div>
+              {{ message }}
+              <button type="button" class="sf-btn sf-btn-outline sf-btn-sm" (click)="loadUnpaid()">
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      } @else if (unpaid(); as orders) {
+        <div class="sf-table-scroll">
+          <table class="sf-table">
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Status</th>
+                <th>Reason</th>
+                <th class="is-num">Attempts</th>
+                <th class="is-num">Total</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (order of orders; track order.id) {
+                <tr>
+                  <td>
+                    <a class="app-mono" [routerLink]="['/orders', order.id]">{{ order.id }}</a>
+                  </td>
+                  <td><app-status-badge [status]="order.status" /></td>
+                  <td class="sf-text-muted">{{ order.failureReason ?? '–' }}</td>
+                  <td class="is-num">{{ order.paymentAttempts }}</td>
+                  <td class="is-num">{{ order.total | money }}</td>
+                  <td>{{ order.updatedAt | date: 'medium' }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="6" class="sf-text-muted">No unpaid orders.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="sf-panel-body"><p class="sf-text-muted" role="status">Loading…</p></div>
+      }
+    </section>
   </div>
 </section>
 

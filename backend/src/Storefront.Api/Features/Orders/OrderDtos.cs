@@ -33,3 +33,13 @@ public sealed record PaymentAttemptDto(int Number, PaymentAttemptStatus Status, 
     public static PaymentAttemptDto From(PaymentAttempt attempt) =>
         new(attempt.Number, attempt.Status, attempt.FailureReason);
 }
+
+/// <summary>One row of the admin "Unpaid orders tracking" table.</summary>
+public sealed record UnpaidOrderDto(
+    Guid Id,
+    OrderStatus Status,
+    string? FailureReason,
+    MoneyDto Total,
+    int PaymentAttempts,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
