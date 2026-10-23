@@ -24,6 +24,15 @@ spec:
     size: 5Gi
     # Retain: deleting the PVC by mistake keeps the Scaleway volume, and the data with it.
     storageClass: sbs-default-retain
+  # On the storefront's own node pool, like the chart's pods (values.yaml, dedicatedNode).
+  affinity:
+    nodeSelector:
+      dedicated: storefront
+    tolerations:
+      - key: k8s.scaleway.com/dedicated
+        operator: Equal
+        value: storefront
+        effect: NoSchedule
   resources:
     requests:
       cpu: 100m

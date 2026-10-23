@@ -8,6 +8,14 @@ ingress:
   className: nginx
   clusterIssuer: letsencrypt-prod
 
+# Runs every storefront pod on the Kapsule pool "storefront", made with the tags
+# noprefix=dedicated=storefront (label) and taint=dedicated=storefront:NoSchedule. Kapsule prefixes the
+# taint's key but not the label's. Set to null to schedule on any node.
+dedicatedNode:
+  key: dedicated
+  taintKey: k8s.scaleway.com/dedicated
+  value: storefront
+
 # The secret CloudNativePG creates for deploy/database.yaml.
 database:
   secretName: storefront-db-app

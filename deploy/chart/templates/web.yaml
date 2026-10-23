@@ -17,6 +17,7 @@ spec:
       labels:
         app.kubernetes.io/name: web
     spec:
+      {{- include "storefront.scheduling" . | nindent 6 }}
       securityContext:
         seccompProfile: { type: RuntimeDefault }
       containers:

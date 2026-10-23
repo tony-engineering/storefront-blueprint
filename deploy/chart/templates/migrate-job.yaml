@@ -21,6 +21,7 @@ spec:
       labels:
         app.kubernetes.io/name: storefront-migrate
     spec:
+      {{- include "storefront.scheduling" . | nindent 6 }}
       restartPolicy: Never
       securityContext:
         seccompProfile: { type: RuntimeDefault }

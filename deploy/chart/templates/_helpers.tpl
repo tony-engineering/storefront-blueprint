@@ -33,3 +33,19 @@ runAsNonRoot: true
 capabilities:
   drop: [ALL]
 {{- end }}
+
+{{/*
+Pins a pod to the storefront's own node pool. The pool's nodes carry the label and a NoSchedule taint,
+so only pods that tolerate it land there, and these pods land nowhere else.
+*/}}
+{{- define "storefront.scheduling" -}}
+{{- with .Values.dedicatedNode -}}
+nodeSelector:
+  {{ .key }}: {{ .value }}
+tolerations:
+  - key: {{ .taintKey }}
+    operator: Equal
+    value: {{ .value }}
+    effect: NoSchedule
+{{- end }}
+{{- end }}
