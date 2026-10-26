@@ -56,10 +56,10 @@ public sealed class LoadRunnerTests
             // Read-only reconcile lookup: the order recorded against an idempotency key, or 404.
             if (path.Contains("/orders/by-key/"))
             {
-                var key = path[(path.LastIndexOf('/') + 1)..];
+                var lookupKey = path[(path.LastIndexOf('/') + 1)..];
                 lock (_gate)
                 {
-                    return Task.FromResult(_ordersByKey.TryGetValue(key, out var orderId)
+                    return Task.FromResult(_ordersByKey.TryGetValue(lookupKey, out var orderId)
                         ? Json(HttpStatusCode.OK, $$"""{"orderId":"{{orderId}}","status":"Paid"}""")
                         : new HttpResponseMessage(HttpStatusCode.NotFound));
                 }
