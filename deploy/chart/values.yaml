@@ -52,5 +52,9 @@ loadlab:
     requests:
       cpu: 50m
       memory: 96Mi
+    # The generator holds every in-flight request (Task + HttpRequestMessage) for the whole run, so
+    # peak memory scales with the request count. A high-rate test (e.g. pool-storm at 800/s × 45s ≈
+    # 36k requests) OOMs at 256Mi; 1Gi covers it. Kept under the node's headroom so a load test never
+    # evicts the API or database pods sharing the storefront pool.
     limits:
-      memory: 256Mi
+      memory: 1Gi
