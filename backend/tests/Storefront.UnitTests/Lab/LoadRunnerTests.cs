@@ -53,6 +53,18 @@ public sealed class LoadRunnerTests
                 }
             }
 
+            // Read-only reconcile lookup: the order recorded against an idempotency key, or 404.
+            if (path.Contains("/orders/by-key/"))
+            {
+                var key = path[(path.LastIndexOf('/') + 1)..];
+                lock (_gate)
+                {
+                    return Task.FromResult(_ordersByKey.TryGetValue(key, out var orderId)
+                        ? Json(HttpStatusCode.OK, $$"""{"orderId":"{{orderId}}","status":"Paid"}""")
+                        : new HttpResponseMessage(HttpStatusCode.NotFound));
+                }
+            }
+
             // The API is "restarting": the first calls fail, then it is back.
             if (alwaysFail || Interlocked.Increment(ref _orderCalls) <= failFirstOrders)
             {

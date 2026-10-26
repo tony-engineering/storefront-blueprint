@@ -11,6 +11,7 @@ import { problemMessage } from '../../core/http/problem';
 import { LabApiService } from './lab-api.service';
 import { LabRun, LabSample, LabStatus, LabTest, RunPhase } from './lab.models';
 import { HeatmapChart } from './heatmap-chart';
+import { OrderDonut } from './order-donut';
 import { RepliesChart } from './replies-chart';
 import { StatusChart } from './status-chart';
 
@@ -27,7 +28,7 @@ type StepState = 'done' | 'current' | 'failed' | 'todo';
  */
 @Component({
   selector: 'app-lab-page',
-  imports: [StatusChart, RepliesChart, HeatmapChart],
+  imports: [StatusChart, RepliesChart, HeatmapChart, OrderDonut],
   templateUrl: './lab-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

@@ -36,6 +36,17 @@ export interface AuditCheck {
   detail: string;
 }
 
+/**
+ * How the keys ended up once the generator reconciled the ones it never got an answer for.
+ * `confirmed` got a 2xx while sending; `recovered` had an order after all (a silent success);
+ * `dropped` never created one — orders the store lost under load.
+ */
+export interface Reconciliation {
+  confirmed: number;
+  recovered: number;
+  dropped: number;
+}
+
 export type RunPhase = 'Initializing' | 'Sending' | 'Finalizing' | 'Done' | 'Failed';
 
 export interface LabRun {
@@ -46,6 +57,7 @@ export interface LabRun {
   startedAt: string;
   finishedAt: string | null;
   audit: AuditCheck[];
+  reconciliation: Reconciliation | null;
   error: string | null;
   sampleCount: number;
   samples: LabSample[];

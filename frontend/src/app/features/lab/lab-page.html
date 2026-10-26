@@ -176,6 +176,10 @@
             </div>
           }
 
+          @if (run.reconciliation; as reconciliation) {
+            <app-order-donut [reconciliation]="reconciliation" />
+          }
+
           <div class="sf-stack">
             <app-status-chart [samples]="samples()" />
             <app-replies-chart [samples]="samples()" />

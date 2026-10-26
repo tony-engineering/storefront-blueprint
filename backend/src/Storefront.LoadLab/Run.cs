@@ -24,6 +24,13 @@ public sealed record Sample(
 
 public sealed record AuditCheck(string Id, string Label, string Result, string Detail);
 
+/// <summary>
+/// How the keys ended up, once the generator reconciled the ones it never got an answer for against the API.
+/// <paramref name="Confirmed"/> got a 2xx while sending; <paramref name="Recovered"/> had an order after all
+/// (a silent success); <paramref name="Dropped"/> never created one — orders the store lost under load.
+/// </summary>
+public sealed record Reconciliation(int Confirmed, int Recovered, int Dropped);
+
 /// <summary>One load-test run. Written by the runner, read by the status endpoint; every access takes the lock.</summary>
 public sealed class Run(Guid id, LabTest test, DateTimeOffset startedAt)
 {
@@ -33,6 +40,7 @@ public sealed class Run(Guid id, LabTest test, DateTimeOffset startedAt)
     private double _percent;
     private DateTimeOffset? _finishedAt;
     private IReadOnlyList<AuditCheck> _audit = [];
+    private Reconciliation? _reconciliation;
     private string? _error;
 
     public Guid Id { get; } = id;
@@ -66,7 +74,7 @@ public sealed class Run(Guid id, LabTest test, DateTimeOffset startedAt)
         }
     }
 
-    public void Finish(RunPhase phase, DateTimeOffset now, IReadOnlyList<AuditCheck> audit, string? error = null)
+    public void Finish(RunPhase phase, DateTimeOffset now, IReadOnlyList<AuditCheck> audit, string? error = null, Reconciliation? reconciliation = null)
     {
         lock (_gate)
         {
@@ -74,6 +82,7 @@ public sealed class Run(Guid id, LabTest test, DateTimeOffset startedAt)
             _percent = phase == RunPhase.Done ? 100 : _percent;
             _finishedAt = now;
             _audit = audit;
+            _reconciliation = reconciliation;
             _error = error;
         }
     }
@@ -85,7 +94,7 @@ public sealed class Run(Guid id, LabTest test, DateTimeOffset startedAt)
             var from = Math.Clamp(after, 0, _samples.Count);
             return new RunView(
                 Id, Test.Id, _phase.ToString(), Math.Round(_percent, 1), StartedAt, _finishedAt,
-                _audit, _error, _samples.Count, _samples.Skip(from).ToList());
+                _audit, _reconciliation, _error, _samples.Count, _samples.Skip(from).ToList());
         }
     }
 }
@@ -98,6 +107,7 @@ public sealed record RunView(
     DateTimeOffset StartedAt,
     DateTimeOffset? FinishedAt,
     IReadOnlyList<AuditCheck> Audit,
+    Reconciliation? Reconciliation,
     string? Error,
     int SampleCount,
     IReadOnlyList<Sample> Samples);

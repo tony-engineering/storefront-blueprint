@@ -107,6 +107,10 @@ public sealed class LoadRunner(
             var created = keys.Count(k => k.OrderCount > 0);
             await WaitUntilSettledAsync(run, http, () => latest, created, cancellationToken);
 
+            // Reconcile the keys we never got an answer for: a silent request may still have created an order.
+            // Read-only, so a key that truly dropped stays dropped (re-POSTing it would rescue a real loss).
+            var reconciliation = await ReconcileAsync(http, keys, test.Requests, cancellationToken);
+
             var final = await GetStatsAsync(http, run.Id, cancellationToken) ?? latest ?? new OrderStats(0, []);
             latest = final;
             var audit = Audit(keys, final, metrics);
@@ -114,7 +118,7 @@ public sealed class LoadRunner(
             await samplerStop.CancelAsync();
             await sampler;
             run.AddSample(TakeSample(run, metrics, final, started));
-            run.Finish(RunPhase.Done, clock.GetUtcNow(), audit);
+            run.Finish(RunPhase.Done, clock.GetUtcNow(), audit, reconciliation: reconciliation);
         }
         catch (Exception ex)
         {
@@ -307,6 +311,53 @@ public sealed class LoadRunner(
         }
     }
 
+    /// <summary>
+    /// For every key the generator never saw accepted, ask the API read-only whether it created an order.
+    /// Recovered keys are marked accepted so the audit counts them; the rest are orders the store dropped.
+    /// </summary>
+    private async Task<Reconciliation> ReconcileAsync(HttpClient http, IReadOnlyList<KeyState> keys, int requests, CancellationToken ct)
+    {
+        // Only keys that were actually sent at least once (requests cycle through the keys in order).
+        var sent = keys.Take(Math.Min(keys.Count, requests)).ToArray();
+        var confirmed = sent.Count(k => k.OrderCount > 0);
+        var unconfirmed = sent.Where(k => k.OrderCount == 0).ToArray();
+
+        var recovered = 0;
+        await Parallel.ForEachAsync(
+            unconfirmed,
+            new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = ct },
+            async (key, token) =>
+            {
+                if (await LookupOrderAsync(http, key.Key, token) is { } orderId)
+                {
+                    key.Accepted(orderId);
+                    Interlocked.Increment(ref recovered);
+                }
+            });
+
+        return new Reconciliation(confirmed, recovered, unconfirmed.Length - recovered);
+    }
+
+    private static async Task<Guid?> LookupOrderAsync(HttpClient http, Guid key, CancellationToken ct)
+    {
+        try
+        {
+            using var response = await http.GetAsync($"/api/admin/lab/orders/by-key/{key}", ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+            var order = await response.Content.ReadFromJsonAsync<KeyOrderDto>(Json, ct);
+            return order?.OrderId;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return null; // could not confirm it exists → counts as dropped
+        }
+    }
+
     internal static IReadOnlyList<AuditCheck> Audit(IReadOnlyList<KeyState> keys, OrderStats stats, Metrics metrics)
     {
         var accepted = keys.Count(k => k.OrderCount > 0);
@@ -337,4 +388,6 @@ public sealed class LoadRunner(
     private sealed record ProductRef(Guid Id);
 
     private sealed record StatsDto(int Total, Dictionary<string, int> ByStatus);
+
+    private sealed record KeyOrderDto(Guid OrderId, string Status);
 }

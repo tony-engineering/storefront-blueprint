@@ -35,6 +35,7 @@ const run = (phase: LabRun['phase'], extra: Partial<LabRun> = {}): LabRun => ({
   startedAt: '2026-10-23T10:00:00Z',
   finishedAt: null,
   audit: [],
+  reconciliation: null,
   error: null,
   sampleCount: 0,
   samples: [],

@@ -24,6 +24,16 @@ public static class LabEndpoints
             .WithDescription("Counts the orders sent with `X-Lab-Run: {runId}`.")
             .Produces<LabOrderStats>();
 
+        // Read-only: the load generator calls this to reconcile keys it never got an answer for, deciding
+        // whether a silent request still created an order. It must never create one, so only GET.
+        app.MapGet("/api/admin/lab/orders/by-key/{key:guid}", GetOrderByKeyAsync)
+            .WithTags("Admin: lab")
+            .WithName("GetLabOrderByKey")
+            .WithSummary("The order an idempotency key created, if any")
+            .WithDescription("Looks up the order recorded against one `Idempotency-Key`. 404 when the key created no order.")
+            .Produces<LabKeyOrder>()
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -39,6 +49,32 @@ public static class LabEndpoints
         var byStatus = groups.ToDictionary(g => g.Status.ToString(), g => g.Count);
         return TypedResults.Ok(new LabOrderStats(byStatus.Values.Sum(), byStatus));
     }
+
+    private static async Task<IResult> GetOrderByKeyAsync(Guid key, StorefrontDbContext db, CancellationToken cancellationToken)
+    {
+        // The idempotency record gets its OrderId in the same transaction as the order, so if a request ever
+        // created an order the record points at it, even when the caller never received the reply.
+        var orderId = await db.IdempotencyRecords
+            .AsNoTracking()
+            .Where(r => r.Key == key && r.OrderId != null)
+            .Select(r => r.OrderId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (orderId is not { } id)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var status = await db.Orders
+            .AsNoTracking()
+            .Where(o => o.Id == id)
+            .Select(o => o.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return TypedResults.Ok(new LabKeyOrder(id, status.ToString()));
+    }
 }
 
 public sealed record LabOrderStats(int Total, IReadOnlyDictionary<string, int> ByStatus);
+
+public sealed record LabKeyOrder(Guid OrderId, string Status);
