@@ -43,24 +43,14 @@
         </div>
       } @else {
         <div class="sf-product-grid">
-          @for (product of list; track product.id) {
+          @for (product of list; track product.id; let i = $index) {
             <article class="sf-product-card">
               <div class="sf-product-media">
-                <div class="sf-product-placeholder">
-                  <svg
-                    viewBox="0 0 64 64"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 30 32 9l26 21" />
-                    <path d="M12 25v31h40V25" />
-                    <path d="M27 56V41h10v15" />
-                    <path d="M17 33h7v7h-7zM40 33h7v7h-7z" />
-                  </svg>
-                </div>
+                <img
+                  [src]="iconFor(i)"
+                  alt=""
+                  style="object-fit: contain; padding: 1rem"
+                />
               </div>
               <div class="sf-product-details">
                 <h2 class="sf-product-title">{{ product.name }}</h2>

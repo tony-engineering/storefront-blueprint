@@ -7,6 +7,8 @@ import { problemMessage } from '../../core/http/problem';
 import { Product } from '../../shared/models/api.models';
 import { MoneyPipe } from '../../shared/pipes/money.pipe';
 
+const ICON_COUNT = 7;
+
 @Component({
   selector: 'app-product-list',
   imports: [RouterLink, MoneyPipe],
@@ -34,6 +36,10 @@ export class ProductList {
         next: (products) => this.products.set(products),
         error: (err) => this.error.set(problemMessage(err)),
       });
+  }
+
+  protected iconFor(index: number): string {
+    return `houses_icons/${(index % ICON_COUNT) + 1}.png`;
   }
 
   protected add(product: Product): void {
