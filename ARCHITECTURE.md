@@ -437,7 +437,7 @@ Every green push to `main` deploys to `https://storefront.tony-engineering.com`.
 on:
   workflow_dispatch:
     inputs:
-      test: { type: choice, default: flash-sale, options: [steady, flash-sale, ramp, outage, slow-provider, retry-storm] }
+      test: { type: choice, default: flash-sale, options: [steady, flash-sale, ramp, outage, slow-provider, retry-storm, pool-storm] }
 ```
 
 - A **separate workflow** triggered only with `workflow_dispatch`, so it can never block or slow the CI pipeline on push.
@@ -535,6 +535,8 @@ loadlab polls GET /api/admin/lab/runs/{runId}/order-stats every second
 | `outage` | 200, 5/s for 40 s | 100% unavailable | 50 ms | `Retrying`, then `Unavailable` at about 62 s; nobody charged |
 | `slow-provider` | 300, 5/s for 60 s | 100% ok | 2–4 s | About half `Unknown`, then `Paid` |
 | `restart-api` | 600 orders, 10/s for 60 s | 100% ok | 200–800 ms | Restart the API by hand while it runs: every order still ends `Paid` |
+| `restart-db` | 600 orders, 10/s for 60 s | 100% ok | 200–800 ms | Restart the database by hand while it runs: every order still ends `Paid` |
 | `retry-storm` | 400 requests, 20 keys, at once | 100% ok | 500 ms | Exactly 20 orders |
+| `pool-storm` | 6,750 orders, 150/s for 45 s | 100% ok | none | Saturates the DB connection pool: p95 jumps, some 5xx are retried, all end `Paid` |
 
-Sized for production (one API replica, 50m CPU). **Risks:** `ramp` slows real shoppers while it runs; the lock and cooldown cap the damage. The reconciler handles at most 50 attempts per 5 s, one after another (about 10/s), so `outage` and `slow-provider` show a backlog while Finalizing. That is a finding the Lab shows, not something it fixes.
+Sized for production (one API replica, 50m CPU). **Risks:** `ramp` and `pool-storm` slow real shoppers while they run; the lock and cooldown cap the damage. `pool-storm` deliberately pushes past the single Postgres instance and the default connection pool, so it is the heaviest test — expect queued connections and retried 5xx, not a healthy run. The reconciler handles at most 50 attempts per 5 s, one after another (about 10/s), so `outage` and `slow-provider` show a backlog while Finalizing. That is a finding the Lab shows, not something it fixes.

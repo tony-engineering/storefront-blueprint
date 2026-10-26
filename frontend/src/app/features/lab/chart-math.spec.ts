@@ -8,6 +8,7 @@ const sample = (orders: Record<string, number>): LabSample => ({
   inFlight: 0,
   p50: 0,
   p95: 0,
+  latencyBuckets: [],
   errors: 0,
   replies: {},
   orders,

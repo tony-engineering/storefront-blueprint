@@ -16,6 +16,7 @@ public sealed record Sample(
     int InFlight,
     double P50,
     double P95,
+    IReadOnlyList<int> LatencyBuckets,
     int Errors,
     IReadOnlyDictionary<string, int> Replies,
     IReadOnlyDictionary<string, int> Orders,

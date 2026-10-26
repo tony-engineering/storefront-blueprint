@@ -10,7 +10,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { problemMessage } from '../../core/http/problem';
 import { LabApiService } from './lab-api.service';
 import { LabRun, LabSample, LabStatus, LabTest, RunPhase } from './lab.models';
-import { LatencyChart } from './latency-chart';
+import { HeatmapChart } from './heatmap-chart';
+import { RepliesChart } from './replies-chart';
 import { StatusChart } from './status-chart';
 
 export const ACTIVE_POLL_MS = 1000;
@@ -26,7 +27,7 @@ type StepState = 'done' | 'current' | 'failed' | 'todo';
  */
 @Component({
   selector: 'app-lab-page',
-  imports: [StatusChart, LatencyChart],
+  imports: [StatusChart, RepliesChart, HeatmapChart],
   templateUrl: './lab-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -84,6 +85,13 @@ export class LabPage {
 
   /** The worst second of the run: the last sample is often quiet, which would show 0. */
   protected readonly peakP95 = computed(() => Math.max(0, ...this.samples().map((s) => s.p95)));
+
+  /** Server errors (5xx) so far. Replies are cumulative, so the latest sample holds the run total. */
+  protected readonly fivexx = computed(() =>
+    Object.entries(this.latest()?.replies ?? {})
+      .filter(([code]) => code.startsWith('5'))
+      .reduce((sum, [, count]) => sum + count, 0),
+  );
 
   protected readonly progressTone = computed(() => {
     const phase = this.run()?.phase;

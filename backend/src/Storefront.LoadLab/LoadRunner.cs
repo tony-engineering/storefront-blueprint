@@ -257,7 +257,7 @@ public sealed class LoadRunner(
 
     private Sample TakeSample(Run run, Metrics metrics, OrderStats? stats, long started)
     {
-        var (completed, p50, p95) = metrics.Drain();
+        var (completed, p50, p95, buckets) = metrics.Drain();
         return new Sample(
             T: (int)Math.Round(clock.GetElapsedTime(started).TotalSeconds),
             Sent: metrics.Sent,
@@ -265,6 +265,7 @@ public sealed class LoadRunner(
             InFlight: metrics.InFlight,
             P50: p50,
             P95: p95,
+            LatencyBuckets: buckets,
             Errors: metrics.Errors,
             Replies: metrics.Replies,
             Orders: stats?.ByStatus ?? [],

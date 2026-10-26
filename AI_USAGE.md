@@ -197,6 +197,8 @@ I ran the implementation of the Lab plan in a separate session, using another mo
 - **Changes from the plan:**
   - The cooldown is 10 s, not 60 s.
   - A seventh test, `restart-api`: restart the API by hand during the run, and every order should still end `Paid`.
+  - An eighth test, `restart-db`: restart the database by hand during the run, and every order should still end `Paid`.
+  - A ninth test, `pool-storm`: sustained high traffic that saturates the single database instance and its connection pool; requests queue and some 5xx are retried, but every order still ends `Paid`.
   - The load generator retries like a browser. With no answer, a 5xx or a 409, it resends with the same key for up to 90 s, then gives up and the audit reports it.
   - The load generator asks for 50m CPU, not 100m.
 - **Size:** 30 files changed (about 800 lines) and about 30 new files (about 3,000 lines, including a 313-line generated migration file).

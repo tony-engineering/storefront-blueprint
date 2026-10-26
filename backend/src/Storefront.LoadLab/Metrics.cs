@@ -46,8 +46,14 @@ public sealed class Metrics
     /// <summary>The request is over, whatever came of it.</summary>
     public void Done() => Interlocked.Decrement(ref _inFlight);
 
-    /// <summary>Latency percentiles of the replies since the last call, and how many there were.</summary>
-    public (int Completed, double P50, double P95) Drain()
+    /// <summary>Upper edges (ms) of the latency histogram; the extra top bucket catches everything slower than the last.</summary>
+    public static readonly double[] LatencyBoundsMs = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+
+    /// <summary>
+    /// Latency of the replies since the last call: how many, the p50/p95, and a histogram with one count per
+    /// <see cref="LatencyBoundsMs"/> bucket plus a final overflow bucket (so <c>LatencyBoundsMs.Length + 1</c> counts).
+    /// </summary>
+    public (int Completed, double P50, double P95, int[] Buckets) Drain()
     {
         var values = new List<double>();
         while (_latenciesMs.TryDequeue(out var v))
@@ -56,7 +62,20 @@ public sealed class Metrics
         }
 
         values.Sort();
-        return (values.Count, Percentile(values, 0.50), Percentile(values, 0.95));
+
+        var buckets = new int[LatencyBoundsMs.Length + 1];
+        foreach (var v in values)
+        {
+            var bucket = 0;
+            while (bucket < LatencyBoundsMs.Length && v >= LatencyBoundsMs[bucket])
+            {
+                bucket++;
+            }
+
+            buckets[bucket]++;
+        }
+
+        return (values.Count, Percentile(values, 0.50), Percentile(values, 0.95), buckets);
     }
 
     public static double Percentile(IReadOnlyList<double> sorted, double p)

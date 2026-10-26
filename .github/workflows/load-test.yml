@@ -20,6 +20,7 @@ on:
           - outage
           - slow-provider
           - retry-storm
+          - pool-storm
 
 # One load test at a time: two runs on the same runner pool would skew each other's numbers.
 concurrency:

@@ -141,12 +141,13 @@
             <div class="sf-stat">
               <span class="sf-stat-label">Errors</span>
               <span class="sf-stat-value">{{ latest()?.errors ?? 0 }}</span>
+              <span class="sf-stat-hint">no reply (refused/timeout)</span>
             </div>
-          </div>
-
-          <div class="sf-card-grid">
-            <app-status-chart [samples]="samples()" />
-            <app-latency-chart [samples]="samples()" />
+            <div class="sf-stat">
+              <span class="sf-stat-label">5xx</span>
+              <span class="sf-stat-value">{{ fivexx() }}</span>
+              <span class="sf-stat-hint">server errors, retried</span>
+            </div>
           </div>
 
           @if (run.audit.length > 0) {
@@ -174,6 +175,12 @@
               </ul>
             </div>
           }
+
+          <div class="sf-stack">
+            <app-status-chart [samples]="samples()" />
+            <app-replies-chart [samples]="samples()" />
+            <app-heatmap-chart [samples]="samples()" />
+          </div>
         </div>
       </section>
     }

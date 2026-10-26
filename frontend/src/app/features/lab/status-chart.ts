@@ -1,11 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { orderStatus, orderStatusColor } from '../../../ui-kit/storefront.js';
-import { nearestIndex, niceMax, STACK_ORDER, stackSamples } from './chart-math';
+import {
+  nearestByTime,
+  niceMax,
+  STACK_ORDER,
+  stackSamples,
+  windowBounds,
+  windowStartIndex,
+  WINDOW_SECONDS,
+} from './chart-math';
 import { LabSample } from './lab.models';
 
-const W = 600;
-const H = 220;
-const PAD = { left: 44, right: 12, top: 10, bottom: 26 };
+// Authored in a large coordinate space so the CSS-sized (11px) axis text and 1px strokes render small
+// relative to the chart: the chart fills its row but reads as "zoomed out", showing more at a glance.
+const W = 1600;
+const H = 700;
+const PAD = { left: 108, right: 32, top: 28, bottom: 64 };
 const PLOT_W = W - PAD.left - PAD.right;
 const PLOT_H = H - PAD.top - PAD.bottom;
 
@@ -43,8 +53,8 @@ const PLOT_H = H - PAD.top - PAD.bottom;
               {{ tick.value }}
             </text>
           }
-          <text [attr.x]="pad.left" [attr.y]="h - 6">0 s</text>
-          <text [attr.x]="w - pad.right" [attr.y]="h - 6" text-anchor="end">{{ lastT() }} s</text>
+          <text [attr.x]="pad.left" [attr.y]="h - 6">{{ windowStart() }} s</text>
+          <text [attr.x]="w - pad.right" [attr.y]="h - 6" text-anchor="end">{{ windowEnd() }} s</text>
         </g>
         @if (hoverX(); as x) {
           <line
@@ -83,14 +93,22 @@ export class StatusChart {
   protected readonly pad = PAD;
   protected readonly hover = signal<number | null>(null);
 
-  protected readonly lastT = computed(() => this.samples().at(-1)?.t ?? 0);
+  /** The last 60 s of samples drawn in the chart. */
+  protected readonly view = computed(() => {
+    const samples = this.samples();
+    return samples.slice(windowStartIndex(samples));
+  });
+
+  private readonly bounds = computed(() => windowBounds(this.samples()));
+  protected readonly windowStart = computed(() => this.bounds().start);
+  protected readonly windowEnd = computed(() => this.bounds().end);
 
   private readonly yMax = computed(() =>
-    niceMax(Math.max(1, ...this.samples().map((s) => s.ordersTotal))),
+    niceMax(Math.max(1, ...this.view().map((s) => s.ordersTotal))),
   );
 
-  private x(i: number, count: number): number {
-    return PAD.left + (count <= 1 ? 0 : (i / (count - 1)) * PLOT_W);
+  private xt(t: number): number {
+    return PAD.left + ((t - this.bounds().start) / WINDOW_SECONDS) * PLOT_W;
   }
 
   private y(value: number): number {
@@ -103,16 +121,15 @@ export class StatusChart {
   });
 
   protected readonly bands = computed(() => {
-    const samples = this.samples();
+    const samples = this.view();
     if (samples.length < 2) {
       return [];
     }
     return stackSamples(samples)
       .filter((band) => band.y1.some((v, i) => v > band.y0[i]))
       .map((band) => {
-        const n = samples.length;
-        const top = band.y1.map((v, i) => `${this.x(i, n)},${this.y(v)}`);
-        const bottom = band.y0.map((v, i) => `${this.x(i, n)},${this.y(v)}`).reverse();
+        const top = band.y1.map((v, i) => `${this.xt(samples[i].t)},${this.y(v)}`);
+        const bottom = band.y0.map((v, i) => `${this.xt(samples[i].t)},${this.y(v)}`).reverse();
         return {
           status: band.status,
           color: orderStatusColor(band.status),
@@ -124,7 +141,7 @@ export class StatusChart {
   /** Only statuses that occurred, so the legend stays short. */
   protected readonly legend = computed(() => {
     const seen = new Set(
-      this.samples().flatMap((s) => Object.keys(s.orders).filter((k) => s.orders[k] > 0)),
+      this.view().flatMap((s) => Object.keys(s.orders).filter((k) => s.orders[k] > 0)),
     );
     return STACK_ORDER.filter((status) => seen.has(status)).map((status) => ({
       status,
@@ -135,12 +152,12 @@ export class StatusChart {
 
   protected readonly hovered = computed(() => {
     const i = this.hover();
-    return i === null ? null : (this.samples()[i] ?? null);
+    return i === null ? null : (this.view()[i] ?? null);
   });
 
   protected readonly hoverX = computed(() => {
     const i = this.hover();
-    return i === null ? null : this.x(i, this.samples().length);
+    return i === null ? null : this.xt(this.view()[i]?.t ?? 0);
   });
 
   protected readonly tooltipLeft = computed(() => {
@@ -163,7 +180,8 @@ export class StatusChart {
   protected move(event: PointerEvent): void {
     const svg = event.currentTarget as SVGSVGElement;
     const rect = svg.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * W - PAD.left;
-    this.hover.set(nearestIndex(x, PLOT_W, this.samples().length));
+    const localX = Math.min(Math.max(((event.clientX - rect.left) / rect.width) * W - PAD.left, 0), PLOT_W);
+    const seconds = this.bounds().start + (localX / PLOT_W) * WINDOW_SECONDS;
+    this.hover.set(nearestByTime(this.view(), seconds));
   }
 }

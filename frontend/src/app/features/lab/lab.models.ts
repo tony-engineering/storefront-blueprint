@@ -20,6 +20,8 @@ export interface LabSample {
   inFlight: number;
   p50: number;
   p95: number;
+  /** Reply counts for this second, one per latency bucket (see LATENCY_BOUNDS_MS) plus a final overflow bucket. */
+  latencyBuckets: number[];
   errors: number;
   replies: Record<string, number>;
   /** Orders by status, as counted by the API. */

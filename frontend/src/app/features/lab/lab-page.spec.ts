@@ -152,6 +152,7 @@ function sampleAt(t: number) {
     inFlight: 1,
     p50: 10,
     p95: 20,
+    latencyBuckets: [0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0],
     errors: 0,
     replies: { '201': t },
     orders: { Paid: t },
