@@ -322,18 +322,27 @@ public sealed class LoadRunner(
         var confirmed = sent.Count(k => k.OrderCount > 0);
         var unconfirmed = sent.Where(k => k.OrderCount == 0).ToArray();
 
+        // Bounded fan-out without System.Threading.Tasks.Parallel (not on every deployment): a semaphore
+        // caps how many lookups run at once.
         var recovered = 0;
-        await Parallel.ForEachAsync(
-            unconfirmed,
-            new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = ct },
-            async (key, token) =>
+        using var gate = new SemaphoreSlim(16);
+        var lookups = unconfirmed.Select(async key =>
+        {
+            await gate.WaitAsync(ct);
+            try
             {
-                if (await LookupOrderAsync(http, key.Key, token) is { } orderId)
+                if (await LookupOrderAsync(http, key.Key, ct) is { } orderId)
                 {
                     key.Accepted(orderId);
                     Interlocked.Increment(ref recovered);
                 }
-            });
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        await Task.WhenAll(lookups);
 
         return new Reconciliation(confirmed, recovered, unconfirmed.Length - recovered);
     }
