@@ -106,9 +106,9 @@ public static class LabTests
         // well above where the ramp already bends drives more concurrent orders than the single Postgres instance and
         // its ~100-connection pool can clear, so requests queue for a connection and some time out.
         new("pool-storm", "Overload the pool", "More orders at once than the one database instance and its connection pool can serve.",
-            new RequestSchedule.Constant(800, S(45)),
+            new RequestSchedule.Constant(1000, S(45)),
             [new("tok_success", 100, 0, 0)],
-            "800 orders/s for 45 s", "100% ok", "none",
+            "1000 orders/s for 45 s", "100% ok", "none",
             "The connection pool saturates: p95 jumps, in-flight climbs, some orders wait or get a 5xx and are retried with the same key. Every order still ends Paid. Shows the single Postgres instance is the ceiling. Slows real shoppers while it runs."),
     ];
 
